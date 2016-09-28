@@ -1065,18 +1065,20 @@ class Bundle(ParameterSet):
         # we also need to make sure that stars don't overlap each other
         # so we'll check for each pair of stars (see issue #70 on github)
         for orbitref in hier.get_orbits():
-            if len(hier.get_children_of(orbitref)) == 2:
+            starrefs = hier.get_children_of(orbitref)
+
+            if len(starrefs) == 2 and np.all([hier.get_kind_of(starref)=='star' for starref in starrefs]):
                 q = self.get_value(qualifier='q', component=orbitref, context='component')
                 ecc = self.get_value(qualifier='ecc', component=orbitref, context='component')
 
-                starrefs = hier.get_children_of(orbitref)
+
                 comp0 = hier.get_primary_or_secondary(starrefs[0], return_ind=True)
                 comp1 = hier.get_primary_or_secondary(starrefs[1], return_ind=True)
                 q0 = roche.q_for_component(q, comp0)
                 q1 = roche.q_for_component(q, comp1)
 
-                F0 = self.get_value(qualifier='syncpar', component=starrefs[0], context='component')
-                F1 = self.get_value(qualifier='syncpar', component=starrefs[1], context='component')
+                F0 = self.get_value(qualifier='syncpar', component=starrefs[0], context='component', check_visible=False)
+                F1 = self.get_value(qualifier='syncpar', component=starrefs[1], context='component', check_visible=False)
 
                 pot0 = self.get_value(qualifier='pot', component=starrefs[0], context='component')
                 pot0 = roche.pot_for_component(pot0, q0, comp0)
