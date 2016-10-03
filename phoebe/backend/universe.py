@@ -388,56 +388,71 @@ class System(object):
         # than sum of max_rs
         possible_eclipse = False
         if len(self.bodies) == 1:
+            # TODO: need to handle overcontacts in triples better (the envelope
+            # will always need to be sent to eclipsing, but the additional
+            # star will only need to be sent if possibly eclipsing)
             if self.bodies[0].__class__.__name__ == 'Envelope':
                 possible_eclipse = True
             else:
                 possible_eclipse = False
         else:
             max_rs = [body.max_r for body in self.bodies]
+            comps = self._bodies.keys()
+            comp_eclipse = []
             for i in range(0, len(self.xs)-1):
                 for j in range(i+1, len(self.xs)):
                     proj_sep_sq = sum([(c[i]-c[j])**2 for c in (self.xs,self.ys)])
                     max_sep_ecl = max_rs[i] + max_rs[j]
 
-                    if proj_sep_sq < max_sep_ecl**2:
+                    if proj_sep_sq < (1.1*max_sep_ecl)**2 or expose_horizon or horizon_method!='boolean':
                         # then this pair has the potential for eclipsing triangles
-                        possible_eclipse = True
-                        break
+                        if comps[i] not in comp_eclipse:
+                            comp_eclipse.append(comps[i])
+                        if comps[j] not in comp_eclipse:
+                            comp_eclipse.append(comps[j])
 
-        if not possible_eclipse and not expose_horizon and horizon_method=='boolean':
-            eclipse_method = 'only_horizon'
-
-        # meshes is an object which allows us to easily access and update columns
+        # meshes are objects which allow us to easily access and update columns
         # in the meshes *in memory*.  That is meshes.update_columns will propogate
         # back to the current mesh for each body.
-        meshes = self.meshes
+        meshes_eclipse = mesh.Meshes({comp: body for comp, body in self._bodies.items() if comp in comp_eclipse})
+        meshes_horizon = mesh.Meshes({comp: body for comp, body in self._bodies.items() if comp not in comp_eclipse})
 
         # Reset all visibilities to be fully visible to start
-        meshes.update_columns('visiblities', 1.0)
+        meshes_eclipse.update_columns('visiblities', 1.0)
+        meshes_horizon.update_columns('visibilities', 1.0)
 
-        ecl_func = getattr(eclipse, eclipse_method)
+        if len(comp_eclipse):
+            ecl_func = getattr(eclipse, eclipse_method)
 
-        if eclipse_method=='native':
-            ecl_kwargs = {'horizon_method': horizon_method}
+            if eclipse_method=='native':
+                ecl_kwargs = {'horizon_method': horizon_method}
+            else:
+                ecl_kwargs = {}
+
+            visibilities, weights, horizon = ecl_func(meshes_eclipse,
+                                                      self.xs, self.ys, self.zs,
+                                                      expose_horizon=expose_horizon,
+                                                      **ecl_kwargs)
+
+
+            # visiblilities here is a dictionary with keys being the component
+            # labels and values being the np arrays of visibilities.  We can pass
+            # this dictionary directly and the columns will be applied respectively.
+            meshes_eclipse.update_columns('visibilities', visibilities)
+
+            if weights is not None:
+                meshes_eclipse.update_columns('weights', weights)
         else:
-            ecl_kwargs = {}
+            horizon = None
 
-        visibilities, weights, horizon = ecl_func(meshes,
-                                                  self.xs, self.ys, self.zs,
-                                                  expose_horizon=expose_horizon,
-                                                  **ecl_kwargs)
+        if len(comps)-len(comp_eclipse):
+            visibilities, dump, dump = eclipse.only_horizon(meshes_horizon,
+                                                            self.xs, self.ys, self.zs)
+
+            meshes_horizon.update_columns('visibilities', visibilities)
 
         # NOTE: analytic horizons are called in backends.py since they don't
         # actually depend on the mesh at all.
-
-        # visiblilities here is a dictionary with keys being the component
-        # labels and values being the np arrays of visibilities.  We can pass
-        # this dictionary directly and the columns will be applied respectively.
-        meshes.update_columns('visibilities', visibilities)
-
-        if weights is not None:
-            meshes.update_columns('weights', weights)
-
         return horizon
 
 
