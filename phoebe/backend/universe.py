@@ -46,11 +46,13 @@ class System(object):
                  horizon_method='boolean',
                  dynamics_method='keplerian',
                  reflection_method='none',
-                 boosting_method='none'):
+                 boosting_method='none',
+                 parent_envelope_of={}):
         """
         :parameter dict bodies_dict: dictionary of component names and Bodies (or subclass of Body)
         """
         self._bodies = bodies_dict
+        self._parent_envelope_of = parent_envelope_of
         self.eclipse_method = eclipse_method
         self.horizon_method = horizon_method
         self.dynamics_method = dynamics_method
@@ -127,11 +129,19 @@ class System(object):
         meshables = hier.get_meshables()
         bodies_dict = {comp: globals()[hier.get_kind_of(comp).title()].from_bundle(b, comp, compute, dynamics_method=dynamics_method, mesh_init_phi=mesh_init_phi, datasets=datasets, **kwargs) for comp in meshables}
 
+        # envelopes need to know their relationships with the underlying stars
+        parent_envelope_of = {}
+        for meshable in meshables:
+            if hier.get_kind_of(meshable) == 'envelope':
+                for starref in hier.get_siblings_of(meshable):
+                    parent_envelope_of[starref] = meshable
+
         return cls(bodies_dict, eclipse_method=eclipse_method,
                    horizon_method=horizon_method,
                    dynamics_method=dynamics_method,
                    reflection_method=reflection_method,
-                   boosting_method=boosting_method)
+                   boosting_method=boosting_method,
+                   parent_envelope_of=parent_envelope_of)
 
     def items(self):
         """
@@ -162,7 +172,12 @@ class System(object):
         """
         TODO: add documentation
         """
-        return self._bodies[component]
+        if component in self._bodies.keys():
+            return self._bodies[component]
+        else:
+            # then hopefully we're a child star of an overcontact envelope
+            parent_component = self._parent_envelope_of[component]
+            return self._bodies[parent_component]
 
     @property
     def meshes(self):
@@ -181,7 +196,7 @@ class System(object):
         #
         # rather than calling self.meshes repeatedly
 
-        return mesh.Meshes(self._bodies)
+        return mesh.Meshes(self._bodies, self._parent_envelope_of)
 
 
     def initialize_meshes(self):
@@ -237,8 +252,8 @@ class System(object):
                 # TODO: this needs to take ld_func_bol, ld_coeffs_bol
                 body.populate_observable(time, 'lc', 'bol',
                                          passband=bol_pband,
-                                         ld_func='linear',
-                                         ld_coeffs=[0.],
+                                         ld_func=body.ld_func['bol'],
+                                         ld_coeffs=body.ld_coeffs['bol'],
                                          atm='blackbody',
                                          boosting_method='none')
 
@@ -277,33 +292,35 @@ class System(object):
             teffs_intrins_per_body = meshes.get_column('teffs', computed_type='for_computations').values()
 
             intens_intrins_per_body = meshes.get_column('abs_normal_intensities:bol', computed_type='for_computations').values()
+            ldint_per_body = meshes.get_column('ldint:bol', computed_type='for_computations').values()
 
-            ld_func = kwargs.get('ld_func_bol', 'logarithmic')
-            ld_coeffs = kwargs.get('ld_coeffs_bol', [0.0,0.0])
-            ld_func_and_coeffs = [tuple([ld_func] + list(ld_coeffs)) for _ in self.bodies]
-            # ld_inds = np.zeros(frac_refls_f
+            fluxes_intrins_per_body = [intens_intrins * ldint for intens_intrins, ldint in zip(intens_intrins_per_body, ldint_per_body)]
 
-            intens_intrins_and_refl_per_body = libphoebe.mesh_radiosity_problem_vertices_nbody_convex(vertices_per_body,
+            ld_func_and_coeffs = [tuple([body.ld_func['bol']] + [np.asarray(body.ld_coeffs['bol'])]) for body in self.bodies]
+
+            fluxes_intrins_and_refl_per_body = libphoebe.mesh_radiosity_problem_vertices_nbody_convex(vertices_per_body,
                                                                                        triangles_per_body,
                                                                                        normals_per_body,
                                                                                        areas_per_body,
                                                                                        frac_refls_per_body,
-                                                                                       intens_intrins_per_body,
+                                                                                       fluxes_intrins_per_body,
                                                                                        ld_func_and_coeffs,
                                                                                        self.reflection_method.title()
                                                                                        )
 
 
-            # intens_intrins_and_refl_per_body = libphoebe.mesh_radiosity_problem_triangles_nbody_convex(vertices_per_body,
+            # fluxes_intrins_and_refl_per_body = libphoebe.mesh_radiosity_problem_triangles_nbody_convex(vertices_per_body,
             #                                                                            triangles_per_body,
             #                                                                            normals_per_body,
             #                                                                            areas_per_body,
             #                                                                            frac_refls_per_body,
-            #                                                                            intens_intrins_per_body,
+            #                                                                            fluxes_intrins_per_body,
             #                                                                            ld_func_and_coeffs,
             #                                                                            self.reflection_method.title()
             #                                                                            )
 
+
+            intens_intrins_and_refl_per_body = [fluxes_intrins_and_refl / ldint for fluxes_intrins_and_refl, ldint in zip(fluxes_intrins_and_refl_per_body, ldint_per_body)]
 
             intens_intrins_flat = meshes.get_column_flat('abs_normal_intensities:bol', computed_type='for_computations')
             intens_intrins_and_refl_flat = meshes.pack_column_flat(intens_intrins_and_refl_per_body)
@@ -311,6 +328,7 @@ class System(object):
 
         else:
             logger.info("handling reflection (general case), method='{}'".format(self.reflection_method))
+            raise NotImplementedError("passing ld_func_bol and ld_coeffs_bol to reflection for general case not yet supported")
 
             vertices_flat = meshes.get_column_flat('vertices')
             triangles_flat = meshes.get_column_flat('triangles')
@@ -319,35 +337,41 @@ class System(object):
             frac_refls_flat = meshes.get_column_flat('frac_refl', computed_type='for_computations')
 
             intens_intrins_flat = meshes.get_column_flat('abs_normal_intensities:bol', computed_type='for_computations')
+            ldint_flat = meshes.get_column_flat('ldint:bol', computed_type='for_computations')
+            fluxes_intrins_flat = intens_intrins_flat * ldint_flat
 
-            ld_func = kwargs.get('ld_func_bol', 'logarithmic')
-            ld_coeffs = kwargs.get('ld_coeffs_bol', [0.0,0.0])
-            ld_func_and_coeffs = [tuple([ld_func] + list(ld_coeffs))]
+            ld_func_and_coeffs = [tuple([body.ld_func['bol']] + [np.asarray(body.ld_coeffs['bol'])]) for body in self.bodies]
+
+            # TODO: get the correct index for each vertex - maybe something like meshes.get_column_flat('comp'),
+            # then remove the NotImplementedError and test
             ld_inds = np.zeros(frac_refls_flat.shape)
+            # ld_inds = meshes.pack_column_flat({body.name: body.comp_no for body in self.bodies})
 
             # TODO: this will fail for WD meshes - use triangles instead?
-            intens_intrins_and_refl_flat = libphoebe.mesh_radiosity_problem_vertices(vertices_flat,
+            fluxes_intrins_and_refl_flat = libphoebe.mesh_radiosity_problem_vertices(vertices_flat,
                                                                                     triangles_flat,
                                                                                     normals_flat,
                                                                                     areas_flat,
                                                                                     frac_refls_flat,
-                                                                                    intens_intrins_flat,
+                                                                                    fluxes_intrins_flat,
                                                                                     ld_func_and_coeffs,
                                                                                     ld_inds,
                                                                                     self.reflection_method.title()
                                                                                     )
 
 
-            # intens_intrins_and_refl_flat = libphoebe.mesh_radiosity_problem_triangles(vertices_flat,
+            # fluxes_intrins_and_refl_flat = libphoebe.mesh_radiosity_problem_triangles(vertices_flat,
                                                                                     # triangles_flat,
                                                                                     # normals_flat,
                                                                                     # areas_flat,
                                                                                     # frac_refls_flat,
-                                                                                    # intens_intrins_flat,
+                                                                                    # fluxes_intrins_flat,
                                                                                     # ld_func_and_coeffs,
                                                                                     # ld_inds,
                                                                                     # self.reflection_method.title()
                                                                                     # )
+
+            intens_intrins_and_refl_flat = fluxes_intrins_and_refl_flat / ldint_flat
 
         teffs_intrins_flat = meshes.get_column_flat('teffs', computed_type='for_computations')
 
@@ -1001,6 +1025,7 @@ class Body(object):
             self._fill_abuns(abun=self.abun)
             self._fill_albedos(frac_refl=self.frac_refl)
 
+
         return
 
     def _fill_abuns(self, mesh=None, abun=0.0):
@@ -1036,29 +1061,16 @@ class Body(object):
         # emergent normal intensities in this dataset's passband/atm in absolute units
         abs_normal_intensities = self.mesh['abs_normal_intensities:{}'.format(dataset)].centers
 
+        ldint = self.mesh['ldint:{}'.format(dataset)].centers
+
         # Our total integrated intensity in absolute units (luminosity) is now
         # simply the sum of the normal emergent intensities times pi (to account
         # for intensities emitted in all directions across the solid angle),
         # limbdarkened as if they were at mu=1, and multiplied by their respective areas
 
-        # TODO: make these all kwargs.get('blah', self.default)?
-        ld_func = self.ld_func[dataset]
-        ld_coeffs = self.ld_coeffs[dataset]
-        intens_weighting = self.intens_weighting[dataset]
-        atm = self.atm
+        total_integrated_intensity = np.sum(abs_normal_intensities*areas*ldint) * np.pi
 
-        pb = passbands.get_passband(self.passband[dataset])
-        ld = pb.ldint(Teff=self.mesh.teffs.centers,
-                     logg=self.mesh.loggs.centers,
-                     abun=self.mesh.abuns.centers,
-                     atm=atm,
-                     ld_func=ld_func,
-                     ld_coeffs=ld_coeffs,
-                     photon_weighted=intens_weighting=='photon')
-
-        total_integrated_intensity = np.sum(abs_normal_intensities*areas*ld) * np.pi
-
-        # NOTE: when this is computed the first time (for the sake of determing
+        # NOTE: when this is computed the first time (for the sake of determining
         # pblum_scale), get_pblum_scale will return 1.0
         return total_integrated_intensity * self.get_pblum_scale(dataset)
 
@@ -1076,11 +1088,15 @@ class Body(object):
         # luminosity in relative units gives the provided pblum
         pblum_scale = pblum / total_integrated_intensity
 
+        self.set_pblum_scale(dataset, pblum_scale)
+
+    def set_pblum_scale(self, dataset, pblum_scale, **kwargs):
         self._pblum_scale[dataset] = pblum_scale
 
-    def get_pblum_scale(self, dataset):
+    def get_pblum_scale(self, dataset, **kwargs):
         """
         """
+        # kwargs needed just so component can be passed but ignored
 
         if dataset in self._pblum_scale.keys():
             return self._pblum_scale[dataset]
@@ -1486,6 +1502,8 @@ class Star(Body):
         intens_weighting = {ds: b.get_value('intens_weighting', dataset=ds, **kwargs) for ds in datasets_intens}
         ld_func = {ds: b.get_value('ld_func', dataset=ds, component=component, **kwargs) for ds in datasets_intens}
         ld_coeffs = {ds: b.get_value('ld_coeffs', dataset=ds, component=component, check_visible=False, **kwargs) for ds in datasets_intens}
+        ld_func['bol'] = b.get_value('ld_func_bol', component=component, context='component', **kwargs)
+        ld_coeffs['bol'] = b.get_value('ld_coeffs_bol', component=component, context='component', **kwargs)
 
         return cls(F, Phi, masses, sma, ecc, freq_rot, teff, gravb_bol,
                 abun, frac_refl, mesh_method, dynamics_method,
@@ -1565,35 +1583,24 @@ class Star(Body):
         Phi = kwargs.get('Phi', self.Phi)  # NOTE: self.Phi automatically corrects for the secondary star
         q = self.q  # NOTE: this is automatically flipped to be 1./q for secondary components
 
-        # TODO: remove rounding once libphoebe can handle more decimal places
         mesh_args = (q, F, d, Phi)
 
         if mesh_method == 'marching':
-            # Phi = kwargs.get('Phi', self.Phi_user)  # NOTE: self.Phi_user is not corrected for the secondary star, but that's fine because we pass primary vs secondary as choice
-            # q = 1./self.q if self.comp_no == 2 else self.q  # NOTE: undo the inversion so this is ALWAYS Mp/Ms
-
             delta = kwargs.get('delta', self.delta)
             maxpoints = int(kwargs.get('maxpoints', self.maxpoints))
-
 
             if self.distortion_method == 'roche':
                 # TODO: check whether roche or misaligned roche from values of incl, etc!!!!
 
-                rpole = roche.potential2rpole(Phi, q, 0.0, F)  # TODO: REMOVE
-                # print "*** as roche", Phi, F, sma, rpole*sma
-
-                # TODO: need to figure this out, this currently causes issues
-                # with large sma (too many triangles).  rpole*sma /helps/ but
-                # doesn't quite do the right thing.
                 rpole = libphoebe.roche_pole(*mesh_args)
                 delta *= rpole
-                # print delta
 
-                # print "*** libphoebe.roche_marcing_mesh", mesh_args, delta
+                # print "*** libphoebe.roche_marching_mesh args: {}, rpole: {}, delta: {}".format(mesh_args, rpole, delta)
 
                 new_mesh = libphoebe.roche_marching_mesh(*mesh_args,
                                                          delta=delta,
                                                          choice=0,
+                                                         full=True,
                                                          max_triangles=maxpoints,
                                                          vertices=True,
                                                          triangles=True,
@@ -1636,12 +1643,13 @@ class Star(Body):
                                                   new_mesh['triangles'],
                                                   curvature=True,
                                                   vertices=True,
-                                                  tnormals=False,
+                                                  tnormals=True,
                                                   areas=True,
                                                   volume=False)
 
                     new_mesh['vertices'] = mo['vertices']
                     new_mesh['areas'] = mo['areas']
+                    new_mesh['tnormals'] = mo['tnormals']
 
                     # TODO: need to update centers (so that they get passed
                     # to the frontend as x, y, z)
@@ -1698,6 +1706,7 @@ class Star(Body):
 
                 new_mesh = libphoebe.rotstar_marching_mesh(*mesh_args,
                                                delta=delta,
+                                               full=True,
                                                max_triangles=maxpoints,
                                                vertices=True,
                                                triangles=True,
@@ -1730,6 +1739,7 @@ class Star(Body):
                                                   new_mesh['pvertices'],
                                                   new_mesh['vnormals'],
                                                   new_mesh['triangles'],
+                                                  curvature=True,
                                                   vertices=True,
                                                   tnormals=False,
                                                   areas=True,
@@ -1982,6 +1992,14 @@ class Star(Body):
                                      ld_coeffs=ld_coeffs,
                                      photon_weighted=intens_weighting=='photon')
 
+            ldint = pb.ldint(Teff=self.mesh.teffs.for_computations,
+                             logg=self.mesh.loggs.for_computations,
+                             abun=self.mesh.abuns.for_computations,
+                             atm=atm,
+                             ld_func=ld_func,
+                             ld_coeffs=ld_coeffs,
+                             photon_weighted=intens_weighting=='photon')
+
             # Beaming/boosting
             if boosting_method == 'none':
                 boost_factors = 1.0
@@ -1997,7 +2015,8 @@ class Star(Body):
             else:
                 raise NotImplementedError("boosting_method='{}' not supported".format(self.boosting_method))
 
-            # TODO: does this make sense to boost proj but not norm?
+            # boosting is aspect dependent so we don't need to correct the
+            # normal intensities
             abs_intensities *= boost_factors
 
             # Handle pblum - distance and l3 scaling happens when integrating (in observe)
@@ -2050,6 +2069,7 @@ class Star(Body):
         # Can we optimize by only returning the essentials if we know we don't need them?
         return {'abs_normal_intensities': abs_normal_intensities, 'normal_intensities': normal_intensities,
             'abs_intensities': abs_intensities, 'intensities': intensities,
+            'ldint': ldint,
             'boost_factors': boost_factors}
 
 
@@ -2061,7 +2081,9 @@ class Envelope(Body):
             dynamics_method='keplerian', mesh_init_phi=0.0, ind_self=0, ind_sibling=1, comp_no=1,
             atm='blackbody', datasets=[], passband={}, intens_weighting={},
             ld_func={}, ld_coeffs={},
-            do_rv_grav=False, features=[], do_mesh_offset=True, **kwargs):
+            do_rv_grav=False, features=[], do_mesh_offset=True,
+            label_envelope='common_envelope', label_primary='primary',
+            label_secondary='secondary', **kwargs):
         """
         [NOT IMPLEMENTED]
 
@@ -2081,6 +2103,10 @@ class Envelope(Body):
                                        ld_func, ld_coeffs,
                                        dynamics_method=dynamics_method,
                                        mesh_init_phi=mesh_init_phi)
+
+        self.label_envelope = label_envelope
+        self.label_primary = label_primary
+        self.label_secondary = label_secondary
 
         # Remember how to compute the mesh
         self.mesh_method = mesh_method
@@ -2132,6 +2158,12 @@ class Envelope(Body):
         self.volume_factor = 1.0  # TODO: eventually make this a parameter (currently defined to be the ratio between volumes at apastron/periastron)
 
         self._do_mesh_offset = do_mesh_offset
+
+        # pblum scale needs to be different for envelopes - we need to actually
+        # track the pblum per-component (envelope, primary, secondary) separately
+        self._pblum_scale = {label_envelope: {},
+                             label_primary: {},
+                             label_secondary: {}}
 
 
     @classmethod
@@ -2251,6 +2283,8 @@ class Envelope(Body):
         intens_weighting = {ds: b.get_value('intens_weighting', dataset=ds, **kwargs) for ds in datasets_intens}
         ld_func = {ds: b.get_value('ld_func', dataset=ds, component=component, **kwargs) for ds in datasets_intens}
         ld_coeffs = {ds: b.get_value('ld_coeffs', dataset=ds, component=component, check_visible=False, **kwargs) for ds in datasets_intens}
+        ld_func['bol'] = b.get_value('ld_func_bol', component=component, context='component', **kwargs)
+        ld_coeffs['bol'] = b.get_value('ld_coeffs_bol', component=component, context='component', **kwargs)
 
         return cls(Phi, masses, sma, ecc, freq_rot, teff1, teff2, abun, frac_refl1, frac_refl2,
                 gravb_bol1, gravb_bol2, mesh_method, dynamics_method,
@@ -2260,7 +2294,10 @@ class Envelope(Body):
                 intens_weighting=intens_weighting,
                 ld_func=ld_func, ld_coeffs=ld_coeffs,
                 do_rv_grav=do_rv_grav,
-                features=features, do_mesh_offset=do_mesh_offset, **mesh_kwargs)
+                features=features, do_mesh_offset=do_mesh_offset,
+                label_envelope=label_envelope,
+                label_primary=label_self, label_secondary=label_sibling,
+                **mesh_kwargs)
 
     @property
     def needs_recompute_instantaneous(self):
@@ -2337,6 +2374,7 @@ class Envelope(Body):
                 new_mesh = libphoebe.roche_marching_mesh(*mesh_args,
                                                          delta=delta,
                                                          choice=2,
+                                                         full=True,
                                                          max_triangles=maxpoints,
                                                          vertices=True,
                                                          triangles=True,
@@ -2374,13 +2412,15 @@ class Envelope(Body):
                                                   new_mesh['pvertices'],
                                                   new_mesh['vnormals'],
                                                   new_mesh['triangles'],
+                                                  curvature=True,
                                                   vertices=True,
-                                                  tnormals=False,
+                                                  tnormals=True,
                                                   areas=True,
                                                   volume=False)
 
                     new_mesh['vertices'] = mo['vertices']
                     new_mesh['areas'] = mo['areas']
+                    new_mesh['tnormals'] = mo['tnormals']
 
                     # TODO: need to update centers (so that they get passed
                     # to the frontend as x, y, z)
@@ -2412,20 +2452,81 @@ class Envelope(Body):
 
                 # create the env_comp array and change the values of all where vertices x>xmin to 1
                 env_comp = np.zeros(len(new_mesh['vertices']))
-                env_comp[new_mesh['vertices'][:,0]>xmin] = 1
 
+                env_comp[new_mesh['vertices'][:,0]>xmin] = 1
+                #
                 new_mesh['env_comp'] = env_comp
+                # print new_mesh['env_comp']
 
                 # do the similar for triangles
                 env_comp3 = np.zeros(len(new_mesh['triangles']))
 
+                # Uncomment this is we want to average over vertices and comment below :/
+                # for i in range(len(new_mesh['triangles'])):
+                #
+                #     #take the vertex indices of each triangle
+                #     vind = new_mesh['triangles'][i]
+                #     print 'vind: ', vind
+                #     env_comp3[i] = np.average([new_mesh['env_comp'][vind[0]],new_mesh['env_comp'][vind[1]],new_mesh['env_comp'][vind[2]]])
+                #
+
+                new_mesh['env_comp3']=env_comp3
+
+                # Comment this is we want to average over vertices
+                N = len(new_mesh['vertices'])
                 for i in range(len(new_mesh['triangles'])):
 
                     #take the vertex indices of each triangle
                     vind = new_mesh['triangles'][i]
-                    env_comp3[i] = np.average([new_mesh['env_comp'][vind[0]],new_mesh['env_comp'][vind[1]],new_mesh['env_comp'][vind[2]]])
+                    center = new_mesh['centers'][i]
 
-                new_mesh['env_comp3']=env_comp3
+                    # the adding of vertices and vertex parameters should go in a function
+
+                    def add_vertex_to_mesh(i,j,vind,comp):
+
+                        N = len(new_mesh['vertices'])
+                        # add vertex params
+                        new_mesh['vertices'] = np.vstack((new_mesh['vertices'],new_mesh['vertices'][vind]))
+                        new_mesh['pvertices'] = np.vstack((new_mesh['pvertices'],new_mesh['pvertices'][vind]))
+                        new_mesh['vnormals'] = np.vstack((new_mesh['vnormals'],new_mesh['vnormals'][vind]))
+                        new_mesh['normgrads'] = np.hstack((new_mesh['normgrads'],new_mesh['normgrads'][vind]))
+                        new_mesh['velocities'] = np.vstack((new_mesh['velocities'],np.zeros(3)))
+                        new_mesh['env_comp'] = np.hstack((new_mesh['env_comp'],comp))
+                        new_mesh['triangles'][i][j] = N
+
+                    if center[0] <= xmin:
+                        new_mesh['env_comp3'][i] = 0
+                        if new_mesh['vertices'][vind[0]][0] > xmin:
+                            add_vertex_to_mesh(i,0,vind[0],0)
+                        else:
+                            new_mesh['env_comp'][vind[0]] = 0
+
+                        if new_mesh['vertices'][vind[1]][0] > xmin:
+                            add_vertex_to_mesh(i,1,vind[1],0)
+                        else:
+                            new_mesh['env_comp'][vind[1]] = 0
+
+                        if new_mesh['vertices'][vind[2]][0] > xmin:
+                            add_vertex_to_mesh(i,2,vind[2],0)
+                        else:
+                            new_mesh['env_comp'][vind[2]] = 0
+
+                    else:
+                        new_mesh['env_comp3'][i] = 1
+                        if new_mesh['vertices'][vind[0]][0] <= xmin:
+                            add_vertex_to_mesh(i,0,vind[0],1)
+                        else:
+                            new_mesh['env_comp'][vind[0]] = 1
+
+                        if new_mesh['vertices'][vind[1]][0] <=xmin:
+                            add_vertex_to_mesh(i,1,vind[1],1)
+                        else:
+                            new_mesh['env_comp'][vind[1]] = 1
+
+                        if new_mesh['vertices'][vind[2]][0] <= xmin:
+                            add_vertex_to_mesh(i,2,vind[2],1)
+                        else:
+                            new_mesh['env_comp'][vind[2]] = 1
 
                 # compute fractional areas of vertices
 
@@ -2463,6 +2564,11 @@ class Envelope(Body):
         else:
             raise NotImplementedError("mesh_method '{}' is not supported".format(mesh_method))
 
+
+        new_mesh['label_envelope'] = self.label_envelope
+        new_mesh['label_primary'] = self.label_primary
+        new_mesh['label_secondary'] = self.label_secondary
+
         return new_mesh, sma, mesh_args
 
 
@@ -2470,8 +2576,6 @@ class Envelope(Body):
         """
         TODO: add documentation
         """
-        pass  # TODO: do we need any of these things for overcontacts?
-
         pole_func = getattr(libphoebe, '{}_pole'.format(self.distortion_method))
         gradOmega_func = getattr(libphoebe, '{}_gradOmega_only'.format(self.distortion_method))
 
@@ -2618,6 +2722,86 @@ class Envelope(Body):
 
         mesh.update_columns(frac_refl=frac_refl)
 
+    def compute_luminosity(self, dataset, component=None, **kwargs):
+        """
+        """
+
+        if component is None:
+            component = self.label_envelope
+
+        # areas are the NON-projected areas of each surface element.  We'll be
+        # integrating over normal intensities, so we don't need to worry about
+        # multiplying by mu to get projected areas.
+        areas = self.mesh.areas_si
+
+        # abs_normal_intensities are directly out of the passbands module and are
+        # emergent normal intensities in this dataset's passband/atm in absolute units
+        abs_normal_intensities = self.mesh['abs_normal_intensities:{}'.format(dataset)].centers
+
+        ldint = self.mesh['ldint:{}'.format(dataset)].centers
+
+        if component == self.label_envelope:
+            areas = areas
+            abs_normal_intensities = abs_normal_intensities
+            ldint = ldint
+        elif component == self.label_primary:
+            areas = areas[self.mesh.env_comp3 == 0]
+            abs_normal_intensities = abs_normal_intensities[self.mesh.env_comp3 == 0]
+            ldint = ldint[self.mesh.env_comp3 == 0]
+        elif component == self.label_secondary:
+            areas = areas[self.mesh.env_comp3 == 1]
+            abs_normal_intensities = abs_normal_intensities[self.mesh.env_comp3 == 1]
+            ldint = ldint[self.mesh.env_comp3 == 1]
+        else:
+            raise ValueError
+
+        # Our total integrated intensity in absolute units (luminosity) is now
+        # simply the sum of the normal emergent intensities times pi (to account
+        # for intensities emitted in all directions across the solid angle),
+        # limbdarkened as if they were at mu=1, and multiplied by their respective areas
+
+        total_integrated_intensity = np.sum(abs_normal_intensities*areas*ldint) * np.pi
+
+        # NOTE: when this is computed the first time (for the sake of determining
+        # pblum_scale), get_pblum_scale will return 1.0
+        return total_integrated_intensity * self.get_pblum_scale(dataset)
+
+
+    def compute_pblum_scale(self, dataset, pblum, component=None, **kwargs):
+        """
+        intensities should already be computed for this dataset at the time for which pblum is being provided
+
+        TODO: add documentation
+        """
+        if component is None:
+            component = self.label_envelope
+
+        total_integrated_intensity = self.compute_luminosity(dataset, component=component, **kwargs)
+        # print 'Total integrated luminosity for component %s is %d.' % (component, total_integrated_intensity)
+        # We now want to remember the scale for all intensities such that the
+        # luminosity in relative units gives the provided pblum
+        pblum_scale = pblum / total_integrated_intensity
+        # print 'Pblum scale for component %s is %d.' % (component, pblum_scale)
+        # self._pblum_scale[component][dataset] = pblum_scale
+        self.set_pblum_scale(dataset, component=component, pblum_scale=pblum_scale)
+
+    def set_pblum_scale(self, dataset, pblum_scale, component=None, **kwargs):
+        if component is None:
+            component = self.label_envelope
+
+        self._pblum_scale[component][dataset] = pblum_scale
+
+    def get_pblum_scale(self, dataset, component=None):
+        """
+        """
+        if component is None:
+            component = self.label_envelope
+
+        if dataset in self._pblum_scale[component].keys():
+            return self._pblum_scale[component][dataset]
+        else:
+            return 1.
+
     def _populate_ifm(self, dataset, **kwargs):
         """
         TODO: add documentation
@@ -2703,6 +2887,14 @@ class Envelope(Body):
                                      ld_coeffs=ld_coeffs,
                                      photon_weighted=intens_weighting=='photon')
 
+            ldint = pb.ldint(Teff=self.mesh.teffs.for_computations,
+                             logg=self.mesh.loggs.for_computations,
+                             abun=self.mesh.abuns.for_computations,
+                             atm=atm,
+                             ld_func=ld_func,
+                             ld_coeffs=ld_coeffs,
+                             photon_weighted=intens_weighting=='photon')
+
             # Beaming/boosting
             if boosting_method == 'none':
                 boost_factors = 1.0
@@ -2724,10 +2916,16 @@ class Envelope(Body):
             # Handle pblum - distance and l3 scaling happens when integrating (in observe)
             # we need to scale each triangle so that the summed normal_intensities over the
             # entire star is equivalent to pblum / 4pi
-            normal_intensities = abs_normal_intensities * self.get_pblum_scale(dataset)
-            intensities = abs_intensities * self.get_pblum_scale(dataset)
 
+            normal_intensities = abs_normal_intensities * self.get_pblum_scale(dataset,component=self.label_primary)
+            intensities = abs_intensities * self.get_pblum_scale(dataset,component=self.label_primary)
 
+            # print 'primary pblum scale', self.get_pblum_scale(dataset,component=self.label_primary)
+
+            normal_intensities[self.mesh.env_comp==1] = abs_normal_intensities[self.mesh.env_comp==1] * self.get_pblum_scale(dataset,component=self.label_secondary)
+            intensities[self.mesh.env_comp==1] = abs_intensities[self.mesh.env_comp==1] * self.get_pblum_scale(dataset,component=self.label_secondary)
+
+            # print 'secondary pblum scale', self.get_pblum_scale(dataset,component=self.label_secondary)
 
         elif lc_method=='analytical':
             raise NotImplementedError("analytical fluxes not yet ported to beta")
@@ -2771,8 +2969,8 @@ class Envelope(Body):
         # Can we optimize by only returning the essentials if we know we don't need them?
         return {'abs_normal_intensities': abs_normal_intensities, 'normal_intensities': normal_intensities,
             'abs_intensities': abs_intensities, 'intensities': intensities,
+            'ldint': ldint,
             'boost_factors': boost_factors}
-
 
 class Feature(object):
     """

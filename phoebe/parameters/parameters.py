@@ -39,6 +39,7 @@ from numpy import sin, cos, tan, arcsin, arccos, arctan, sqrt
 
 from phoebe import u
 from phoebe import conf
+from phoebe import list_passbands, list_installed_passbands, list_online_passbands, download_passband
 
 try:
     import sympy
@@ -2273,7 +2274,14 @@ class ParameterSet(object):
             # TODO: include zparam.uniquetwig if axes_3d
             default_label = ''.join(c[2:] for c in list(difflib.ndiff(xparam.uniquetwig, yparam.uniquetwig)) if c[0] == ' ')
             if default_label[0] == '@':
+                # then let's just trim the leading @
                 default_label = default_label[1:]
+            if default_label.split('@')[0] not in xparam.uniquetwig.split('@')+yparam.uniquetwig.split('@'):
+                # then we had some overlap that doesn't form a whole label
+                # this can happen for "times" and "fluxes", for example
+                # leaving the leading "es".  So let's trim this and only
+                # return the rest
+                default_label = '@'.join(default_label.split('@')[1:])
         kwargs.setdefault('label', default_label)
 
         # Now let's try to figure out the plottype (whether to do plot or
@@ -3609,8 +3617,16 @@ class ChoiceParameter(Parameter):
         except:
             raise ValueError("could not cast value to string")
         else:
+            if self.qualifier=='passband':
+                if value not in self.choices:
+                    self._choices = list_passbands(refresh=True)
+
             if value not in self.choices:
                 raise ValueError("value must be one of {}".format(self.choices))
+
+            if self.qualifier=='passband' and value not in list_installed_passbands():
+                # then we need to download and install before setting
+                download_passband(value)
 
             self._value = value
 
@@ -5094,10 +5110,15 @@ class ConstraintParameter(Parameter):
                     return True
             return False
 
+        def get_values(vars, safe_label=True):
+            # use np.float64 so that dividing by zero will results in a
+            # np.inf
+            return {var.safe_label if safe_label else var.user_label: np.float64(var.get_quantity(t=t).si.value) if var.get_parameter()!=self.constrained_parameter else np.float64(var.get_quantity().si.value) for var in vars}
+
         eq = self.get_value()
 
         if _use_sympy and not eq_needs_builtin(eq):
-            values = {var.safe_label: var.get_quantity(t=t).si.value if var.get_parameter()!=self.constrained_parameter else var.get_quantity().si.value for var in self._vars}
+            values = get_values(self._vars, safe_label=True)
             values['I'] = 1 # CHEATING MAGIC
             # just to be safe, let's reinitialize the sympy vars
             for v in self._vars:
@@ -5118,7 +5139,7 @@ class ConstraintParameter(Parameter):
                 # the else (which works for np arrays) does not work for the built-in funcs
                 # this means that we can't currently support the built-in funcs WITH arrays
 
-                values = {var.user_label: var.get_quantity(t=t).si.value if var.get_parameter()!=self.constrained_parameter else var.get_quantity().si.value for var in self._vars}
+                values = get_values(self._vars, safe_label=False)
 
                 from phoebe.constraints.builtin import ecosw2per0, esinw2per0, rochepotential2rpole, rocherpole2potential, rotstarpotential2rpole, rotstarrpole2potential
                 # if len(self.hierarchy.get_meshables())==1:
@@ -5132,7 +5153,7 @@ class ConstraintParameter(Parameter):
 
             else:
                 # the following works for np arrays
-                values = {var.safe_label: var.get_quantity(t=t).si.value if var.get_parameter()!=self.constrained_parameter else var.get_quantity().si.value for var in self._vars}
+                values = get_values(self._vars, safe_label=True)
 
                 # if any of the arrays are empty (except the one we're filling)
                 # then we want to return an empty array as well (the math would fail)

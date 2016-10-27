@@ -196,7 +196,7 @@ namespace gen_roche {
         
         h -= (dh = f/df);
         
-      } while (std::abs(dh) <  eps*std::abs(h) + min && (++it) < iter_max);
+      } while (std::abs(dh) > eps*std::abs(h) + min && (++it) < iter_max);
     
     } else {  // some generic regime
      
@@ -247,7 +247,6 @@ namespace gen_roche {
     const T & F = 1,
     const T & delta = 1
   ) {
-
     return delta*poleLR(Omega0*delta, q);
   }
 
@@ -871,7 +870,7 @@ namespace gen_roche {
           
           //std::cerr << it << '\t' << t << '\t' << dt << '\n';
           
-       } while ( std::abs(dt) > eps*std::abs(t) + min && ++it < iter_max);
+       } while (std::abs(dt) > eps*std::abs(t) + min && ++it < iter_max);
       
       if (!(it < iter_max))
         std::cerr << "right_lobe_right_xborder::slow convergence\n";
@@ -1229,7 +1228,7 @@ namespace gen_roche {
       std::cerr << std::scientific;
       std::cerr << "point_on_horizon:\n";
       std::cerr << "rnew=" << r[0] << '\t' << r[1] << '\t' << r[2] << '\n';
-      std::cerr << "it=" it << " dr_max=" << dr_max << " r_max=" << r_max << '\n';
+      std::cerr << "it=" << it << " dr_max=" << dr_max << " r_max=" << r_max << '\n';
       #endif 
     
     } while (dr_max > eps*r_max + min && ++it < max_iter);
