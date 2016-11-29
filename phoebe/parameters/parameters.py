@@ -4600,6 +4600,17 @@ class HierarchyParameter(StringParameter):
 
         return str(self._get_by_trace(structure, trace[:-2]+[trace[-2]-1]).split(':')[-1])
 
+    def get_ancestors_of(self, component):
+        """
+        """
+        ret = []
+        parent = False
+        while parent is not None:
+            if parent:
+                ret.append(parent)
+            parent = self.get_parent_of(ret[-1] if len(ret) else component)
+        return ret
+
     def get_sibling_of(self, component, kind=None):
         """
         """
