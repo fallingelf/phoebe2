@@ -435,17 +435,31 @@ class System(object):
                         if comps[j] not in comp_eclipse:
                             comp_eclipse.append(comps[j])
 
+
+        # TODO: fix this - eclipsing doesn't work on only a subset of objects
+        # likely because of the way that the columns are unpacked/packed
+        # and/or the fact that self.xs,ys,zs assumes all meshes to be present
+        if len(comp_eclipse):
+            comp_eclipse = self._bodies.keys()
+
         # meshes are objects which allow us to easily access and update columns
         # in the meshes *in memory*.  That is meshes.update_columns will propogate
         # back to the current mesh for each body.
         meshes_eclipse = mesh.Meshes({comp: body for comp, body in self._bodies.items() if comp in comp_eclipse})
         meshes_horizon = mesh.Meshes({comp: body for comp, body in self._bodies.items() if comp not in comp_eclipse})
 
+
         # Reset all visibilities to be fully visible to start
         meshes_eclipse.update_columns('visiblities', 1.0)
         meshes_horizon.update_columns('visibilities', 1.0)
 
-        if len(comp_eclipse):
+        if len(meshes_horizon.items()):
+            visibilities, dump, dump = eclipse.only_horizon(meshes_horizon,
+                                                            self.xs, self.ys, self.zs)
+
+            meshes_horizon.update_columns('visibilities', visibilities)
+
+        if len(meshes_eclipse.items()):
             ecl_func = getattr(eclipse, eclipse_method)
 
             if eclipse_method=='native':
@@ -469,11 +483,7 @@ class System(object):
         else:
             horizon = None
 
-        if len(comps)-len(comp_eclipse):
-            visibilities, dump, dump = eclipse.only_horizon(meshes_horizon,
-                                                            self.xs, self.ys, self.zs)
 
-            meshes_horizon.update_columns('visibilities', visibilities)
 
         # NOTE: analytic horizons are called in backends.py since they don't
         # actually depend on the mesh at all.
