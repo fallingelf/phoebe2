@@ -321,7 +321,7 @@ class Bundle(ParameterSet):
 
         This is a constructor, so should be called as:
 
-        >>> b = Bundle.default_triple_primary()
+        >>> b = Bundle.default_triple()
 
         :parameter bool inner_as_primary: whether the inner-binary should be
             the primary component of the outer-orbit
@@ -357,6 +357,59 @@ class Bundle(ParameterSet):
 
         # TODO: does this constraint need to be rebuilt when things change?
         # (ie in set_hierarchy)
+
+        return b
+
+    @classmethod
+    def default_quadruple(cls, primary_as_overcontact=False,
+                          secondary_as_overcontact=False,
+                          starA='starA', starB='starB',
+                          starC='starC', starD='starD',
+                          orbitAB='orbitAB', orbitCD='orbitCD',
+                          orbitABCD='orbitABCD',
+                          envelopeAB='envelopeAB', envelopeCD='envelopeCD'):
+        """Load a bundle with a default quadruple system.
+
+        starA - starB -- starC - starD
+
+        This is a constructor, so should be called as:
+
+        >>> b = Bundle.default_quadruple()
+
+        :return: instantiated :class:`Bundle` object
+        """
+
+        if not conf.devel:
+            raise NotImplementedError("'default_quadruple' not officially supported for this release.  Enable developer mode to test.")
+
+        b = cls()
+        b.add_star(component=starA)
+        b.add_star(component=starB)
+        b.add_star(component=starC)
+        b.add_star(component=starD)
+        b.add_orbit(component=orbitAB, period=1)
+        b.add_orbit(component=orbitCD, period=1)
+        b.add_orbit(component=orbitABCD, period=100)
+
+        if primary_as_overcontact:
+            b.add_envelope(component=envelopeAB)
+            AB_hier = _hierarchy.binaryorbit(b[orbitAB], b[starA], b[starB], b[envelopeAB])
+        else:
+            AB_hier = _hierarchy.binaryorbit(b[orbitAB], b[starA], b[starB])
+
+        if secondary_as_overcontact:
+            b.add_envelope(component=envelopeCD)
+            CD_hier = _hierarchy.binaryorbit(b[orbitCD], b[starC], b[starD], b[envelopeCD])
+        else:
+            CD_hier = _hierarchy.binaryorbit(b[orbitCD], b[starC], b[starD])
+
+        ABCD_hier = _hierarchy.binaryorbit(b[orbitABCD], AB_hier, CD_hier)
+        print "*** ABCD_hier:", ABCD_hier
+        b.set_hierarchy(ABCD_hier)
+
+        # TODO: not sure if these two constraints will play nicely with each other
+        # b.add_constraint(constraint.keplers_third_law_hierarchical, orbitABCD, orbitAB)
+        # b.add_constraint(constraint.keplers_third_law_hierarchical, orbitABCD, orbitCD)
 
         return b
 

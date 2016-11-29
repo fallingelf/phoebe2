@@ -107,6 +107,9 @@ def default_binary(*args, **kwargs):
 def default_triple(*args, **kwargs):
     return Bundle.default_triple(*args, **kwargs)
 
+def default_quadruple(*args, **kwargs):
+    return Bundle.default_quadruple(*args, **kwargs)
+
 def is_interactive():
     return conf.interactive
 
