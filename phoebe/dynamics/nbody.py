@@ -87,9 +87,6 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
 
     """
 
-
-
-
     b.run_delayed_constraints()
 
     hier = b.hierarchy
@@ -140,6 +137,17 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
 
         return sim.particles[particle_N]
 
+    def com_phantom_particle(particles):
+        m = sum([p.m for p in particles])
+        x = 1./m * sum([p.x for p in particles])
+        y = 1./m * sum([p.y for p in particles])
+        z = 1./m * sum([p.z for p in particles])
+        vx = 1./m * sum([p.vx for p in particles])
+        vy = 1./m * sum([p.vy for p in particles])
+        vz = 1./m * sum([p.vz for p in particles])
+
+        return rebound.Particle(m=m, x=x, y=y, z=z, vx=vx, vy=vy, vz=vz)
+
 
     times = np.asarray(times) - t0
 
@@ -156,6 +164,7 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
     # NOTE: according to rebound docs: "stepsize will change for adaptive integrators such as IAS15"
     sim.dt = stepsize
 
+    sibling_Ns = []
     for i,starref in enumerate(starrefs):
 
         # TODO: do this in rsol instead of AU so we don't have to convert the particles back and forth below?
@@ -172,17 +181,12 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
         # pass to rebound in AU and AU/d
         # print "***", starref, mass, xs[i][0]/au_to_solrad, ys[i][0]/au_to_solrad, zs[i][0]/au_to_solrad, vxs[i][0]/au_to_solrad, vys[i][0]/au_to_solrad, vzs[i][0]/au_to_solrad
         sim.add(m=mass, x=xs[i][0]/au_to_solrad, y=ys[i][0]/au_to_solrad, z=zs[i][0]/au_to_solrad, vx=vxs[i][0]/au_to_solrad, vy=vys[i][0]/au_to_solrad, vz=vzs[i][0]/au_to_solrad)
-        # sim.add(m=mass, x=xs[i][0], y=ys[i][0], z=zs[i][0], vx=vxs[i][0], vy=vys[i][0], vz=vzs[i][0])
 
-        # just for tracking and testing...
-        # starrefs_per_particle[sim.particles[-1].index] = starref
-
-        # now assign the new particle to each of the ancestor orbits that doesn't
-        # already have an assigned particle
-        # for ancestor in ancestors[starref]:
-            # if ancestor not in particles_per_orbit.keys():
-                # particles_per_orbit[ancestor] = sim.particles[-1]
-
+        # also track the index of all particles that need to be included as
+        # the sibling of this particle (via their COM)
+        # TODO: only do this if return_roche_euler?
+        sibling_starrefs = hier.get_stars_of_sibling_of(starref)
+        sibling_Ns.append([starrefs.index(s) for s in sibling_starrefs])
 
     xs = [np.zeros(times.shape) for j in range(sim.N)]
     ys = [np.zeros(times.shape) for j in range(sim.N)]
@@ -219,9 +223,6 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
                 # print "***", time, j, sim.N
                 particle = sim.particles[j]
 
-            # NOTE: x and y are flipped because of different coordinate system
-            # conventions.  If we change our coordinate system to have x point
-            # to the left, this will need to be updated to match as well.
             xs[j][i] = particle.x * au_to_solrad # solRad
             ys[j][i] = particle.y * au_to_solrad # solRad
             zs[j][i] = particle.z * au_to_solrad  # solRad
@@ -230,18 +231,20 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
             vzs[j][i] = particle.vz * au_to_solrad # solRad/d
 
             if return_roche_euler:
-                # TODO: do we want the LTTE-adjust particles?
+                # TODO: do we want the LTTE-adjusted particles?  Do we need
+                # to wait for all particles to be LTTE-adjusted first?  Or do
+                # we want to do this BEFORE adjusting for LTTE?
 
-                # NOTE: this won't work for the first particle (as its the
-                # primary in the simulation)
-                if j==0:
-                    particle = sim.particles[j+1]
-                else:
-                    particle = sim.particles[j]
+                # NOTE: THIS WILL FAIL FOR j==0 EXCEPT FOR MY LOCAL MODIFICATION
+                # TO REBOUND. SO WE EITHER NEED TO WORK AROUND THIS OR SUBMIT
+                # A PR TO REBOUND AND SET A VERSION DEPENDENCY ONCE ITS ACCEPTED
+                particle = sim.particles[j]
 
-                # get the orbit based on the primary component defined already
-                # in the simulation.
-                orbit = particle.calculate_orbit()
+                sibling_particles = [sim.particles[k] for k in sibling_Ns[j]]
+                com_particle = com_phantom_particle(sibling_particles)
+
+                # get the orbit based on this com_particle as the primary component
+                orbit = particle.calculate_orbit(primary=com_particle)
 
                 # for instantaneous separation, we need the current separation
                 # from the sibling component in units of its instantaneous (?) sma
@@ -251,7 +254,7 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
                 # on the INSTANTANEOUS orbital PERIOD.
                 Fs[j][i] = orbit.P / rotperiods[j]
 
-                # TODO: need to add np.pi for secondary component
+                # TODO: need to add np.pi for secondary component?
                 ethetas[j][i] = orbit.f + orbit.omega # true anomaly + periastron
 
                 elongans[j][i] = orbit.Omega
