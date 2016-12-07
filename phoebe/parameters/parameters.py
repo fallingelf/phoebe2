@@ -1983,16 +1983,31 @@ class ParameterSet(object):
             # edgecolor, but if either of those two values are provided, they
             # should take precedence.
             color = kwargs.get('color', None)
+            if 'facecolors' in kwargs.keys() and 'facecolor' not in kwargs.keys():
+                logger.warning("assuming you meant 'facecolor' instead of 'facecolors'")
+                kwargs['facecolor'] = kwargs.pop('facecolors')
+            if 'edgecolors' in kwargs.keys() and 'edgecolor' not in kwargs.keys():
+                logger.warning("assuming you meant 'edgecolor' instead of 'edgecolors'")
+                kwargs['edgecolor'] = kwargs.pop('edgecolors')
             kwargs.setdefault('facecolor', 'w' if color is None else color)
             kwargs.setdefault('edgecolor', 'k' if color is None else color)
 
             # TODO: do the same logic with cmap, facecmap, edgecmap as colors
             # above
 
-            kwargs.setdefault('xunit', 'solRad')
-            kwargs.setdefault('yunit', 'solRad')
-            if axes_3d:
-                kwargs.setdefault('zunit', 'solRad')
+            if ps.dataset == 'protomesh':
+                # then the array are dimensionless - which really means in
+                # units of sma
+                kwargs.setdefault('xunit', None)
+                kwargs.setdefault('yunit', None)
+                if axes_3d:
+                    kwargs.setdefault('zunit', None)
+            else:
+                kwargs.setdefault('xunit', 'solRad')
+                kwargs.setdefault('yunit', 'solRad')
+                if axes_3d:
+                    kwargs.setdefault('zunit', 'solRad')
+
             if kwargs['xunit'] != kwargs['yunit']:
                 raise ValueError('xunit and yunit must be the same for mesh plots')
             if axes_3d and kwargs['xunit']!=kwargs['zunit']:
@@ -3827,7 +3842,13 @@ class FloatParameter(Parameter):
 
         self.set_value(kwargs.get('value', ''), unit)
 
-        self._dict_fields_other = ['description', 'value', 'quantity', 'default_unit', 'limits', 'visible_if', 'copy_for', 'timederiv'] # TODO: add adjust?  or is that a different subclass?
+        self._dict_fields_other = ['description', 'value', 'quantity', 'default_unit', 'limits', 'visible_if', 'copy_for'] # TODO: add adjust?  or is that a different subclass?
+        if conf.devel:
+            # NOTE: this check will take place when CREATING the parameter,
+            # so toggling devel after won't affect whether timederiv is included
+            # in string representations.
+            self._dict_fields_other += ['timederiv']
+
         self._dict_fields = _meta_fields_all + self._dict_fields_other
 
     @property
@@ -4543,6 +4564,16 @@ class HierarchyParameter(StringParameter):
 
         return structure, trace, our_item
 
+    def change_component(self, old_component, new_component):
+        """
+        """
+        kind = self.get_kind_of(old_component)
+        value = self.get_value()
+        # TODO: this could still cause issues if the names of components are
+        # contained in other components (ie starA, starAB)
+        value = value.replace("{}:{}".format(kind, old_component), "{}:{}".format(kind, new_component))
+        self.set_value(value)
+
     def get_components(self):
         """
         """
@@ -4740,7 +4771,7 @@ class HierarchyParameter(StringParameter):
     def get_meshables(self):
         """
         return a list of components that are meshable (generally stars, but handles
-            the envelope for an overcontact)
+            the envelope for an contact_binary)
         """
 
         l = re.findall(r"[\w']+", self.get_value())
@@ -4764,11 +4795,11 @@ class HierarchyParameter(StringParameter):
         return item_kind
 
 
-    def is_overcontact(self, component):
+    def is_contact_binary(self, component):
         """
         especially useful for constraints
 
-        tells whether any component (star, envelope) is part of an overcontact
+        tells whether any component (star, envelope) is part of a contact_binary
         by checking its siblings for an envelope
         """
         if 'envelope' not in self.get_value():
@@ -5255,6 +5286,7 @@ class ConstraintParameter(Parameter):
 
         self._qualifier = newly_constrained_param.qualifier
         self._component = newly_constrained_param.component
+        self._kind = newly_constrained_param.kind
 
         self._value = str(expression)
         self.set_default_unit(newly_constrained_param.default_unit)

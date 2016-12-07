@@ -45,7 +45,7 @@ class System(object):
     def __init__(self, bodies_dict, eclipse_method='graham',
                  horizon_method='boolean',
                  dynamics_method='keplerian',
-                 reflection_method='none',
+                 irrad_method='none',
                  boosting_method='none',
                  parent_envelope_of={}):
         """
@@ -56,7 +56,7 @@ class System(object):
         self.eclipse_method = eclipse_method
         self.horizon_method = horizon_method
         self.dynamics_method = dynamics_method
-        self.reflection_method = reflection_method
+        self.irrad_method = irrad_method
         for body in self._bodies.values():
             body.boosting_method = boosting_method
 
@@ -100,7 +100,7 @@ class System(object):
             # subdiv_alg = 'edge' #compute_ps.get_value(qualifier='subdiv_alg', **kwargs)
             # subdiv_num = compute_ps.get_value(qualifier='subdiv_num', **kwargs)
             dynamics_method = compute_ps.get_value(qualifier='dynamics_method', **kwargs)
-            reflection_method = compute_ps.get_value(qualifier='reflection_method', **kwargs)
+            irrad_method = compute_ps.get_value(qualifier='irrad_method', **kwargs)
             boosting_method = compute_ps.get_value(qualifier='boosting_method', **kwargs)
             if conf.devel:
                 mesh_init_phi = compute_ps.get_value(qualifier='mesh_init_phi', unit=u.rad, **kwargs)
@@ -112,7 +112,7 @@ class System(object):
             # subdiv_alg = 'edge'
             # subdiv_num = 3
             dynamics_method = 'keplerian'
-            reflection_method = 'none'
+            irrad_method = 'none'
             boosting_method = 'none'
             mesh_init_phi = 0.0
 
@@ -139,7 +139,7 @@ class System(object):
         return cls(bodies_dict, eclipse_method=eclipse_method,
                    horizon_method=horizon_method,
                    dynamics_method=dynamics_method,
-                   reflection_method=reflection_method,
+                   irrad_method=irrad_method,
                    boosting_method=boosting_method,
                    parent_envelope_of=parent_envelope_of)
 
@@ -175,7 +175,7 @@ class System(object):
         if component in self._bodies.keys():
             return self._bodies[component]
         else:
-            # then hopefully we're a child star of an overcontact envelope
+            # then hopefully we're a child star of an contact_binary envelope
             parent_component = self._parent_envelope_of[component]
             return self._bodies[parent_component]
 
@@ -244,22 +244,9 @@ class System(object):
         ignore_effects: whether to ignore reflection and features (useful for computing luminosities)
         """
 
-        bol_pband = 'Bolometric:1760-40000'
 
-        if self.reflection_method is not 'none' and not ignore_effects:  # and kinds includes a kind that requires fluxes
-            for starref, body in self.items():
-                # TODO: no limb-darkening (ie mu=1)
-                # TODO: this needs to take ld_func_bol, ld_coeffs_bol
-                body.populate_observable(time, 'lc', 'bol',
-                                         passband=bol_pband,
-                                         ld_func=body.ld_func['bol'],
-                                         ld_coeffs=body.ld_coeffs['bol'],
-                                         atm='blackbody',
-                                         boosting_method='none')
-
-            # TODO: need to pass ld_coeffs_bol, ld_func_bol as kwargs
+        if self.irrad_method is not 'none' and not ignore_effects:  # and kinds includes a kind that requires fluxes
             self.handle_reflection()
-
 
         for kind, dataset in zip(kinds, datasets):
             for starref, body in self.items():
@@ -268,46 +255,15 @@ class System(object):
     def handle_reflection(self,  **kwargs):
         """
         """
-        if self.reflection_method == 'none':
+        if self.irrad_method == 'none':
             return
-
-
-        # meshes is an object which allows us to easily access and update columns
-        # in the meshes *in memory*.  That is meshes.update_columns will propogate
-        # back to the current mesh for each body.
-        meshes = self.meshes
-
 
         if 'wd' in [body.mesh_method for body in self.bodies]:
             raise NotImplementedError("reflection not yet supported for WD-style meshing")
 
-        if np.all([body.is_convex for body in self.bodies]):
-            logger.info("handling reflection (convex case), method='{}'".format(self.reflection_method))
-
-            vertices_per_body = meshes.get_column('vertices').values()
-            triangles_per_body = meshes.get_column('triangles').values()
-            normals_per_body = meshes.get_column('vnormals').values()
-            areas_per_body = meshes.get_column('areas').values()
-            frac_refls_per_body = meshes.get_column('frac_refl', computed_type='for_computations').values()
-            teffs_intrins_per_body = meshes.get_column('teffs', computed_type='for_computations').values()
-
-            intens_intrins_per_body = meshes.get_column('abs_normal_intensities:bol', computed_type='for_computations').values()
-            ldint_per_body = meshes.get_column('ldint:bol', computed_type='for_computations').values()
-
-            fluxes_intrins_per_body = [intens_intrins * ldint for intens_intrins, ldint in zip(intens_intrins_per_body, ldint_per_body)]
-
-            ld_func_and_coeffs = [tuple([body.ld_func['bol']] + [np.asarray(body.ld_coeffs['bol'])]) for body in self.bodies]
-
-            fluxes_intrins_and_refl_per_body = libphoebe.mesh_radiosity_problem_vertices_nbody_convex(vertices_per_body,
-                                                                                       triangles_per_body,
-                                                                                       normals_per_body,
-                                                                                       areas_per_body,
-                                                                                       frac_refls_per_body,
-                                                                                       fluxes_intrins_per_body,
-                                                                                       ld_func_and_coeffs,
-                                                                                       self.reflection_method.title()
-                                                                                       )
-
+            # TODO: to support this, each call to libphoebe (both for convex
+            # and general case) needs to have an if statement to be replaced by
+            # something like the following:
 
             # fluxes_intrins_and_refl_per_body = libphoebe.mesh_radiosity_problem_triangles_nbody_convex(vertices_per_body,
             #                                                                            triangles_per_body,
@@ -320,70 +276,80 @@ class System(object):
             #                                                                            )
 
 
-            intens_intrins_and_refl_per_body = [fluxes_intrins_and_refl / ldint for fluxes_intrins_and_refl, ldint in zip(fluxes_intrins_and_refl_per_body, ldint_per_body)]
+        # meshes is an object which allows us to easily access and update columns
+        # in the meshes *in memory*.  That is meshes.update_columns will propagate
+        # back to the current mesh for each body.
+        meshes = self.meshes
 
-            intens_intrins_flat = meshes.get_column_flat('abs_normal_intensities:bol', computed_type='for_computations')
-            intens_intrins_and_refl_flat = meshes.pack_column_flat(intens_intrins_and_refl_per_body)
+        # reflection needs bolometric, energy weighted, normal intensities.
+        fluxes_intrins_per_body = []
+        for starref, body in self.items():
+            abs_normal_intensities = passbands.Inorm_bol_bb(Teff=body.mesh.teffs.for_computations,
+                                                            atm='blackbody',
+                                                            photon_weighted=False)
 
+            fluxes_intrins_per_body.append(abs_normal_intensities * np.pi)
+
+        fluxes_intrins_flat = meshes.pack_column_flat(fluxes_intrins_per_body)
+
+        if np.all([body.is_convex for body in self.bodies]):
+            logger.info("handling reflection (convex case), method='{}'".format(self.irrad_method))
+
+            vertices_per_body = meshes.get_column('vertices').values()
+            triangles_per_body = meshes.get_column('triangles').values()
+            normals_per_body = meshes.get_column('vnormals').values()
+            areas_per_body = meshes.get_column('areas').values()
+            irrad_frac_refls_per_body = meshes.get_column('irrad_frac_refl', computed_type='for_computations').values()
+            teffs_intrins_per_body = meshes.get_column('teffs', computed_type='for_computations').values()
+
+            ld_func_and_coeffs = [tuple([body.ld_func['bol']] + [np.asarray(body.ld_coeffs['bol'])]) for body in self.bodies]
+
+            fluxes_intrins_and_refl_per_body = libphoebe.mesh_radiosity_problem_vertices_nbody_convex(vertices_per_body,
+                                                                                       triangles_per_body,
+                                                                                       normals_per_body,
+                                                                                       areas_per_body,
+                                                                                       irrad_frac_refls_per_body,
+                                                                                       fluxes_intrins_per_body,
+                                                                                       ld_func_and_coeffs,
+                                                                                       self.irrad_method.title()
+                                                                                       )
+
+            fluxes_intrins_and_refl_flat = meshes.pack_column_flat(fluxes_intrins_and_refl_per_body)
 
         else:
-            logger.info("handling reflection (general case), method='{}'".format(self.reflection_method))
-            raise NotImplementedError("passing ld_func_bol and ld_coeffs_bol to reflection for general case not yet supported")
+            logger.info("handling reflection (general case), method='{}'".format(self.irrad_method))
 
             vertices_flat = meshes.get_column_flat('vertices')
             triangles_flat = meshes.get_column_flat('triangles')
             normals_flat = meshes.get_column_flat('vnormals')
             areas_flat = meshes.get_column_flat('areas')
-            frac_refls_flat = meshes.get_column_flat('frac_refl', computed_type='for_computations')
-
-            intens_intrins_flat = meshes.get_column_flat('abs_normal_intensities:bol', computed_type='for_computations')
-            ldint_flat = meshes.get_column_flat('ldint:bol', computed_type='for_computations')
-            fluxes_intrins_flat = intens_intrins_flat * ldint_flat
+            irrad_frac_refls_flat = meshes.get_column_flat('irrad_frac_refl', computed_type='for_computations')
 
             ld_func_and_coeffs = [tuple([body.ld_func['bol']] + [np.asarray(body.ld_coeffs['bol'])]) for body in self.bodies]
+            ld_inds_flat = meshes.pack_column_flat({body.comp_no: np.full(fluxes.shape, body.comp_no-1) for body, fluxes in zip(self.bodies, fluxes_intrins_per_body)})
 
-            # TODO: get the correct index for each vertex - maybe something like meshes.get_column_flat('comp'),
-            # then remove the NotImplementedError and test
-            ld_inds = np.zeros(frac_refls_flat.shape)
-            # ld_inds = meshes.pack_column_flat({body.name: body.comp_no for body in self.bodies})
-
-            # TODO: this will fail for WD meshes - use triangles instead?
             fluxes_intrins_and_refl_flat = libphoebe.mesh_radiosity_problem_vertices(vertices_flat,
                                                                                     triangles_flat,
                                                                                     normals_flat,
                                                                                     areas_flat,
-                                                                                    frac_refls_flat,
+                                                                                    irrad_frac_refls_flat,
                                                                                     fluxes_intrins_flat,
                                                                                     ld_func_and_coeffs,
-                                                                                    ld_inds,
-                                                                                    self.reflection_method.title()
+                                                                                    ld_inds_flat,
+                                                                                    self.irrad_method.title()
                                                                                     )
 
 
-            # fluxes_intrins_and_refl_flat = libphoebe.mesh_radiosity_problem_triangles(vertices_flat,
-                                                                                    # triangles_flat,
-                                                                                    # normals_flat,
-                                                                                    # areas_flat,
-                                                                                    # frac_refls_flat,
-                                                                                    # fluxes_intrins_flat,
-                                                                                    # ld_func_and_coeffs,
-                                                                                    # ld_inds,
-                                                                                    # self.reflection_method.title()
-                                                                                    # )
-
-            intens_intrins_and_refl_flat = fluxes_intrins_and_refl_flat / ldint_flat
 
         teffs_intrins_flat = meshes.get_column_flat('teffs', computed_type='for_computations')
 
-        # TODO: set to triangles if WD mesh_method
-        meshes.set_column_flat('abs_normal_intensities:bol', intens_intrins_and_refl_flat)
+        # update the effective temperatures to give this same bolometric
+        # flux under stefan-boltzmann. These effective temperatures will
+        # then be used for all passband intensities.
+        teffs_intrins_and_refl_flat = teffs_intrins_flat * (fluxes_intrins_and_refl_flat / fluxes_intrins_flat) ** (1./4)
 
-        # update the effective temperatures to gives this same bolometric
-        # intensity under stefan-boltzmann these effective temperatures will
-        # then be used for all passband intensities
-        teffs_intrins_and_refl_flat = teffs_intrins_flat * (intens_intrins_and_refl_flat / intens_intrins_flat) ** (1./4)
-
-        # TODO: set to triangles if WD mesh_method
+        # TODO: set to triangles if WD mesh_method (note: WD mesh will
+        # currently raise NotImplementedError)
         meshes.set_column_flat('teffs', teffs_intrins_and_refl_flat)
 
     def handle_eclipses(self, expose_horizon=True, **kwargs):
@@ -1033,7 +999,7 @@ class Body(object):
             self._fill_gravs()
             self._fill_teffs(ignore_effects=ignore_effects)
             self._fill_abuns(abun=self.abun)
-            self._fill_albedos(frac_refl=self.frac_refl)
+            self._fill_albedos(irrad_frac_refl=self.irrad_frac_refl)
 
 
         return
@@ -1049,14 +1015,14 @@ class Body(object):
 
         mesh.update_columns(abuns=abun)
 
-    def _fill_albedos(self, mesh=None, frac_refl=0.0):
+    def _fill_albedos(self, mesh=None, irrad_frac_refl=0.0):
         """
         TODO: add documentation
         """
         if mesh is None:
             mesh = self.mesh
 
-        mesh.update_columns(frac_refl=frac_refl)
+        mesh.update_columns(irrad_frac_refl=irrad_frac_refl)
 
 
     def compute_luminosity(self, dataset, **kwargs):
@@ -1330,7 +1296,8 @@ class CustomBody(Body):
 
 class Star(Body):
     def __init__(self, F, Phi, masses, sma, ecc, freq_rot, teff, gravb_bol,
-                 abun, frac_refl, mesh_method='marching',
+                 abun, irrad_frac_refl,
+                 mesh_method='marching',
                  dynamics_method='keplerian',
                  mesh_init_phi=0.0,
                  ind_self=0, ind_sibling=1,
@@ -1390,7 +1357,8 @@ class Star(Body):
         self.gravb_bol = gravb_bol
         # self.gravb_law = gravb_law
         self.abun = abun
-        self.frac_refl = frac_refl
+        self.irrad_frac_refl = irrad_frac_refl
+
         # self.frac_heat = frac_heat
         # self.frac_scatt = frac_scatt
 
@@ -1470,9 +1438,7 @@ class Star(Body):
         gravb_bol= b.get_value('gravb_bol', component=component, context='component')
 
         abun = b.get_value('abun', component=component, context='component')
-        frac_refl = b.get_value('frac_refl_bol', component=component, context='component')
-        # frac_heat = b.get_value('frac_heat_bol', component=component, context='component')
-        # frac_scatt = b.get_value('frac_scatt_bol', component=component, context='component')
+        irrad_frac_refl = b.get_value('irrad_frac_refl_bol', component=component, context='component')
 
         try:
             do_rv_grav = b.get_value('rv_grav', component=component, compute=compute, check_visible=False, **kwargs) if compute is not None else False
@@ -1516,7 +1482,8 @@ class Star(Body):
         ld_coeffs['bol'] = b.get_value('ld_coeffs_bol', component=component, context='component', **kwargs)
 
         return cls(F, Phi, masses, sma, ecc, freq_rot, teff, gravb_bol,
-                abun, frac_refl, mesh_method, dynamics_method,
+                abun, irrad_frac_refl,
+                mesh_method, dynamics_method,
                 mesh_init_phi, ind_self, ind_sibling, comp_no,
                 is_single=is_single, atm=atm, datasets=datasets,
                 passband=passband, intens_weighting=intens_weighting,
@@ -1692,10 +1659,10 @@ class Star(Body):
                     # pot<->rpole constraint.  So, let's get the Phi that
                     # would match the same polar radius as if it were a roche
                     # potential.
-                    rpole = roche.potential2rpole(Phi, q, 0.0, F)  # TODO: REMOVE
+                    # rpole = roche.potential2rpole(Phi, q, 0.0, F)  # TODO: REMOVE
                     # print "*** before rotstar_from_roche", Phi, F, sma, rpole*sma
                     omega, Phi = libphoebe.rotstar_from_roche(*mesh_args)
-                    rpole = rotstar.potential2rpole(Phi, self.freq_rot, solar_units=True)  # TODO: REMOVE
+                    # rpole = rotstar.potential2rpole(Phi, self.freq_rot, solar_units=True)  # TODO: REMOVE
                     # print "*** after rotstar_from_roche", Phi, omega, sma, rpole*sma
 
                 else:
@@ -1778,10 +1745,86 @@ class Star(Body):
 
                 scale = sma
 
-
             elif self.distortion_method == 'sphere':
-                # TODO: implement this (discretize and save mesh_args)
-                raise NotImplementedError("'sphere' distortion_method not yet supported - try roche")
+
+                if self._is_single:
+                    raise NotImplementedError()
+                    # TODO: need to use rpole directly?
+
+                rpole = libphoebe.roche_pole(*mesh_args)
+                delta *= rpole
+
+                omega = 1./rpole
+
+                mesh_args = (omega,)
+
+                # print "*** sphere_marching_mesh rpole:{} omega:{} delta:{}".format(rpole, mesh_args[0], delta)
+
+                new_mesh = libphoebe.sphere_marching_mesh(*mesh_args,
+                                               delta=delta,
+                                               full=True,
+                                               max_triangles=maxpoints,
+                                               vertices=True,
+                                               triangles=True,
+                                               centers=True,
+                                               vnormals=True,
+                                               tnormals=True,
+                                               cnormals=False,
+                                               vnormgrads=True,
+                                               cnormgrads=False,
+                                               areas=True,
+                                               volume=True,
+                                               init_phi=self.mesh_init_phi)
+
+                av = libphoebe.sphere_area_volume(*mesh_args,
+                                                   larea=True,
+                                                   lvolume=True)
+
+                new_mesh['volume'] = av['lvolume']
+
+                if self._do_mesh_offset:
+                    # vertices directly from meshing are placed directly on the
+                    # potential, causing the volume and surface area to always
+                    # (for convex surfaces) be underestimated.  Now let's jitter
+                    # each of the vertices along their normals to recover the
+                    # expected volume/surface area.  Since they are moved along
+                    # their normals, vnormals applies to both vertices and
+                    # pvertices.
+                    new_mesh['pvertices'] = new_mesh.pop('vertices')
+                    mo = libphoebe.mesh_offseting(av['larea'],
+                                                  new_mesh['pvertices'],
+                                                  new_mesh['vnormals'],
+                                                  new_mesh['triangles'],
+                                                  curvature=True,
+                                                  vertices=True,
+                                                  tnormals=False,
+                                                  areas=True,
+                                                  volume=False)
+
+                    new_mesh['vertices'] = mo['vertices']
+                    new_mesh['areas'] = mo['areas']
+
+                    # TODO: need to update centers (so that they get passed
+                    # to the frontend as x, y, z)
+                    # new_mesh['centers'] = mo['centers']
+
+                else:
+                    # pvertices should just be a copy of vertices
+                    new_mesh['pvertices'] = new_mesh['vertices']
+
+                # We only need the gradients where we'll compute local
+                # quantities which, for a marching mesh, is at the vertices.
+                new_mesh['normgrads'] = new_mesh.pop('vnormgrads')
+
+                # And lastly, let's fill the velocities column - with zeros
+                # at each of the vertices
+                new_mesh['velocities'] = np.zeros(new_mesh['vertices'].shape)
+
+                new_mesh['tareas'] = np.array([])
+
+                scale = sma
+
+
             elif self.distortion_method == 'nbody':
                 # TODO: implement this (discretize and save mesh_args)
                 raise NotImplementedError("'nbody' distortion_method not yet supported - try roche")
@@ -2087,12 +2130,12 @@ class Star(Body):
 
 class Envelope(Body):
     def __init__(self, Phi, masses, sma, ecc, freq_rot, teff1, teff2,
-            abun, frac_refl1, frac_refl2, gravb_bol1, gravb_bol2, mesh_method='marching',
+            abun, irrad_frac_refl1, irrad_frac_refl2, gravb_bol1, gravb_bol2, mesh_method='marching',
             dynamics_method='keplerian', mesh_init_phi=0.0, ind_self=0, ind_sibling=1, comp_no=1,
             atm='blackbody', datasets=[], passband={}, intens_weighting={},
             ld_func={}, ld_coeffs={},
             do_rv_grav=False, features=[], do_mesh_offset=True,
-            label_envelope='common_envelope', label_primary='primary',
+            label_envelope='contact_envelope', label_primary='primary',
             label_secondary='secondary', **kwargs):
         """
         [NOT IMPLEMENTED]
@@ -2102,9 +2145,9 @@ class Envelope(Body):
         :type masses: list of floats
         :parameter float sma: sma of this component's parent orbit (solRad)
         :parameter float abun: abundance of this star
-        :parameter int ind_self: index in all arrays (positions, masses, etc) for the primary star in this overcontact envelope
+        :parameter int ind_self: index in all arrays (positions, masses, etc) for the primary star in this contact_binary envelope
         :parameter int ind_sibling: index in all arrays (positions, masses, etc)
-            for the secondary star in this overcontact envelope
+            for the secondary star in this contact_binary envelope
         :return: instantiated :class:`Envelope` object
         """
         super(Envelope, self).__init__(comp_no, ind_self, ind_sibling, masses,
@@ -2131,7 +2174,7 @@ class Envelope(Body):
         # as defaults if they are not passed in future calls.  If for some reason
         # they are time dependent, then the instantaneous values need to be passed
         # for each call to update_position
-        self.F = 1.0 # by definition for an overcontact
+        self.F = 1.0 # by definition for an contact_binary
         self.freq_rot = freq_rot   # TODO: change to just pass period and compute freq_rot here?
         self.sma = sma
 
@@ -2146,21 +2189,21 @@ class Envelope(Body):
         self.teff1 = teff1
         self.teff2 = teff2
 
-        self.frac_refl1 = frac_refl1
-        self.frac_refl2 = frac_refl2
+        self.irrad_frac_refl1 = irrad_frac_refl1
+        self.irrad_frac_refl2 = irrad_frac_refl2
         self.gravb_bol1 = gravb_bol1
         self.gravb_bol2 = gravb_bol2
         # self.gravb_law = gravb_law
 
         # only putting this here so update_position doesn't complain
-        self.frac_refl = 0.
+        self.irrad_frac_refl = 0.
         # self.gravb_law2 = gravb_law2
 
 
         # self.gravb_bol = gravb_bol
         # self.gravb_law = gravb_law
         self.abun = abun
-        # self.frac_refl = frac_refl
+        # self.irrad_frac_refl = irrad_frac_refl
 
         self.features = features  # TODO: move this to Body
 
@@ -2182,7 +2225,7 @@ class Envelope(Body):
         """
         [NOT IMPLEMENTED]
 
-        Build an overcontact from the :class:`phoebe.frontend.bundle.Bundle` and its
+        Build an contact_binary from the :class:`phoebe.frontend.bundle.Bundle` and its
         hierarchy.
 
         Usually it makes more sense to call :meth:`System.from_bundle` directly.
@@ -2202,7 +2245,7 @@ class Envelope(Body):
         hier = b.hierarchy
 
         if not len(hier.get_value()):
-            raise NotImplementedError("Overcontact envelope meshing requires a hierarchy to exist")
+            raise NotImplementedError("Contact envelope meshing requires a hierarchy to exist")
 
 
         label_envelope = component
@@ -2221,7 +2264,7 @@ class Envelope(Body):
         # meshing for BRS needs d,q,F,Phi
         # d is instantaneous based on x,y,z of self and sibling
         # q is instantaneous based on masses of self and sibling
-        # F we will assume is always 1 for an overcontact
+        # F we will assume is always 1 for an contact_binary
         # Phi we can get now
 
         env_ps = b.filter(component=component, context='component')
@@ -2243,8 +2286,8 @@ class Envelope(Body):
         teff1 = b.get_value('teff', component=starrefs[0], context='component', unit=u.K)
         teff2 = b.get_value('teff', component=starrefs[1], context='component', unit=u.K)
 
-        frac_refl1 = b.get_value('frac_refl_bol', component=starrefs[0], context='component')
-        frac_refl2 = b.get_value('frac_refl_bol', component=starrefs[1], context='component')
+        irrad_frac_refl1 = b.get_value('irrad_frac_refl_bol', component=starrefs[0], context='component')
+        irrad_frac_refl2 = b.get_value('irrad_frac_refl_bol', component=starrefs[1], context='component')
 
         gravb_bol1 = b.get_value('gravb_bol', component=starrefs[0], context='component')
         gravb_bol2 = b.get_value('gravb_bol', component=starrefs[1], context='component')
@@ -2296,7 +2339,7 @@ class Envelope(Body):
         ld_func['bol'] = b.get_value('ld_func_bol', component=component, context='component', **kwargs)
         ld_coeffs['bol'] = b.get_value('ld_coeffs_bol', component=component, context='component', **kwargs)
 
-        return cls(Phi, masses, sma, ecc, freq_rot, teff1, teff2, abun, frac_refl1, frac_refl2,
+        return cls(Phi, masses, sma, ecc, freq_rot, teff1, teff2, abun, irrad_frac_refl1, irrad_frac_refl2,
                 gravb_bol1, gravb_bol2, mesh_method, dynamics_method,
                 mesh_init_phi, ind_self, ind_sibling, comp_no,
                 atm=atm,
@@ -2717,20 +2760,20 @@ class Envelope(Body):
 
         mesh.update_columns(teffs=teffs)
 
-    def _fill_albedos(self, mesh=None, frac_refl=0.0):
+    def _fill_albedos(self, mesh=None, irrad_frac_refl=0.0):
         """
         TODO: add documentation
         """
         if mesh is None:
             mesh = self.mesh
-            frac_refl1 = self.frac_refl1
-            frac_refl2 = self.frac_refl2
+            irrad_frac_refl1 = self.irrad_frac_refl1
+            irrad_frac_refl2 = self.irrad_frac_refl2
 
-        frac_refl = np.zeros(len(mesh.env_comp))
-        frac_refl[mesh.env_comp==0] = frac_refl1
-        frac_refl[mesh.env_comp==1] = frac_refl2
+        irrad_frac_refl = np.zeros(len(mesh.env_comp))
+        irrad_frac_refl[mesh.env_comp==0] = irrad_frac_refl1
+        irrad_frac_refl[mesh.env_comp==1] = irrad_frac_refl2
 
-        mesh.update_columns(frac_refl=frac_refl)
+        mesh.update_columns(irrad_frac_refl=irrad_frac_refl)
 
     def compute_luminosity(self, dataset, component=None, **kwargs):
         """

@@ -508,6 +508,14 @@ class Passband:
         self.content.append('ck2004_ld')
 
     def compute_ck2004_ldints(self):
+        """
+        Computes integrated limb darkening profiles for ck2004 atmospheres.
+        These are used for intensity-to-flux transformations. The evaluated
+        integral is:
+        
+        ldint = 1/pi \int_0^1 Imu mu dmu
+        """
+        
         if 'ck2004_all' not in self.content:
             print('Castelli & Kurucz (2004) intensities are not computed yet. Please compute those first.')
             return None
@@ -540,8 +548,8 @@ class Passband:
                         pni = pImu[a,b,c,i]-pki*mu[i]
                         pldint += pki/3*(mu[i+1]**3-mu[i]**3) + pni/2*(mu[i+1]**2-mu[i]**2)
 
-                    self._ck2004_ldint_energy_grid[a,b,c] = 2*np.pi*ldint
-                    self._ck2004_ldint_photon_grid[a,b,c] = 2*np.pi*pldint
+                    self._ck2004_ldint_energy_grid[a,b,c] = 2*ldint
+                    self._ck2004_ldint_photon_grid[a,b,c] = 2*pldint
 
         self.content.append('ck2004_ldint')
 
@@ -727,15 +735,15 @@ class Passband:
             else:
                 raise ValueError('atm={} not supported with ld_func=interp'.format(atm))
         elif ld_func == 'linear':
-            retval = self.Inorm(Teff=Teff, logg=logg, abun=abun, atm=atm) * self._ldlaw_lin(mu, *ld_coeffs)
+            retval = self.Inorm(Teff=Teff, logg=logg, abun=abun, atm=atm, photon_weighted=photon_weighted) * self._ldlaw_lin(mu, *ld_coeffs)
         elif ld_func == 'logarithmic':
-            retval = self.Inorm(Teff=Teff, logg=logg, abun=abun, atm=atm) * self._ldlaw_log(mu, *ld_coeffs)
+            retval = self.Inorm(Teff=Teff, logg=logg, abun=abun, atm=atm, photon_weighted=photon_weighted) * self._ldlaw_log(mu, *ld_coeffs)
         elif ld_func == 'square_root':
-            retval = self.Inorm(Teff=Teff, logg=logg, abun=abun, atm=atm) * self._ldlaw_sqrt(mu, *ld_coeffs)
+            retval = self.Inorm(Teff=Teff, logg=logg, abun=abun, atm=atm, photon_weighted=photon_weighted) * self._ldlaw_sqrt(mu, *ld_coeffs)
         elif ld_func == 'quadratic':
-            retval = self.Inorm(Teff=Teff, logg=logg, abun=abun, atm=atm) * self._ldlaw_quad(mu, *ld_coeffs)
+            retval = self.Inorm(Teff=Teff, logg=logg, abun=abun, atm=atm, photon_weighted=photon_weighted) * self._ldlaw_quad(mu, *ld_coeffs)
         elif ld_func == 'power':
-            retval = self.Inorm(Teff=Teff, logg=logg, abun=abun, atm=atm) * self._ldlaw_nonlin(mu, *ld_coeffs)
+            retval = self.Inorm(Teff=Teff, logg=logg, abun=abun, atm=atm, photon_weighted=photon_weighted) * self._ldlaw_nonlin(mu, *ld_coeffs)
         else:
             raise NotImplementedError('ld_func={} not supported'.format(ld_func))
 
@@ -752,7 +760,7 @@ class Passband:
             req = np.vstack((Teff, logg, abun)).T
             ldint = libphoebe.interp(req, self._ck2004_axes, self._ck2004_ldint_photon_grid if photon_weighted else self._ck2004_ldint_energy_grid).T[0]
 
-        return ldint / np.pi
+        return ldint
 
     def ldint(self, Teff=5772., logg=4.43, abun=0.0, atm='ck2004', ld_func='interp', ld_coeffs=None, photon_weighted=False):
         if ld_func == 'interp':
@@ -927,6 +935,7 @@ def Inorm_bol_bb(Teff=5772., logg=4.43, abun=0.0, atm='blackbody', photon_weight
     Input parameters mimick the Passband class Inorm method for calling
     convenience.
     """
+
     if atm != 'blackbody':
         raise ValueError('atmosphere must be set to blackbody for Inorm_bol_bb.')
 
