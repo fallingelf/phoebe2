@@ -139,14 +139,48 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
 
     def com_phantom_particle(particles):
         m = sum([p.m for p in particles])
-        x = 1./m * sum([p.x for p in particles])
-        y = 1./m * sum([p.y for p in particles])
-        z = 1./m * sum([p.z for p in particles])
-        vx = 1./m * sum([p.vx for p in particles])
-        vy = 1./m * sum([p.vy for p in particles])
-        vz = 1./m * sum([p.vz for p in particles])
+        x = 1./m * sum([p.m*p.x for p in particles])
+        y = 1./m * sum([p.m*p.y for p in particles])
+        z = 1./m * sum([p.m*p.z for p in particles])
+        vx = 1./m * sum([p.m*p.vx for p in particles])
+        vy = 1./m * sum([p.m*p.vy for p in particles])
+        vz = 1./m * sum([p.m*p.vz for p in particles])
 
         return rebound.Particle(m=m, x=x, y=y, z=z, vx=vx, vy=vy, vz=vz)
+
+    def calculate_euler(sim, j):
+        # NOTE: THIS WILL FAIL FOR j==0 EXCEPT FOR MY LOCAL MODIFICATION
+        # TO REBOUND. SO WE EITHER NEED TO WORK AROUND THIS OR SUBMIT
+        # A PR TO REBOUND AND SET A VERSION DEPENDENCY ONCE ITS ACCEPTED
+        particle = sim.particles[j]
+
+        sibling_particles = [sim.particles[k] for k in sibling_Ns[j]]
+        com_particle = com_phantom_particle(sibling_particles)
+
+        # get the orbit based on this com_particle as the primary component
+        orbit = particle.calculate_orbit(primary=com_particle)
+
+        # print "*** m1 m2: {} {}".format(particle.m, com_particle.m)
+        # print "*** (x1, y1, z1) (x2, y2, z2): ({}, {}, {}) ({}, {}, {})".format(particle.x, particle.y, particle.z, com_particle.x, com_particle.y, com_particle.z)
+        # print "*** (vx1, vy1, vz1) (vx2, vy2, vz2): ({}, {}, {}) ({}, {}, {})".format(particle.vx, particle.vy, particle.vz, com_particle.vx, com_particle.vy, com_particle.vz)
+        # print "**** P, a, d, d/a, F, inc", orbit.P, orbit.a, orbit.d, orbit.d/orbit.a, orbit.P/rotperiods[j], orbit.inc
+
+        # for instantaneous separation, we need the current separation
+        # from the sibling component in units of its instantaneous (?) sma
+        d = orbit.d / orbit.a
+        # for syncpar (F), assume that the rotational FREQUENCY will
+        # remain fixed - so we simply need to updated syncpar based
+        # on the INSTANTANEOUS orbital PERIOD.
+        F = orbit.P / rotperiods[j]
+
+        # TODO: need to add np.pi for secondary component?
+        etheta = orbit.f + orbit.omega # true anomaly + periastron
+
+        elongan = orbit.Omega
+
+        eincl = orbit.inc
+
+        return d, F, etheta, elongan, eincl
 
 
     times = np.asarray(times) - t0
@@ -187,6 +221,18 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
         # TODO: only do this if return_roche_euler?
         sibling_starrefs = hier.get_stars_of_sibling_of(starref)
         sibling_Ns.append([starrefs.index(s) for s in sibling_starrefs])
+
+
+    #### TESTING ###
+    # print "*** TESTING EULER BEFORE INTEGRATION"
+    # for j,starref in enumerate(starrefs):
+    #     print "*** {} original: (x, y, z) (vx, vy, vz): ({}, {}, {}) ({}, {}, {})".format(starref, xs[j][0]/au_to_solrad, ys[j][0]/au_to_solrad, zs[j][0]/au_to_solrad, vxs[j][0]/au_to_solrad, vys[j][0]/au_to_solrad, vzs[j][0]/au_to_solrad)
+    #     calculate_euler(sim, j)
+    # exit()
+
+    ################
+
+
 
     xs = [np.zeros(times.shape) for j in range(sim.N)]
     ys = [np.zeros(times.shape) for j in range(sim.N)]
@@ -235,31 +281,13 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
                 # to wait for all particles to be LTTE-adjusted first?  Or do
                 # we want to do this BEFORE adjusting for LTTE?
 
-                # NOTE: THIS WILL FAIL FOR j==0 EXCEPT FOR MY LOCAL MODIFICATION
-                # TO REBOUND. SO WE EITHER NEED TO WORK AROUND THIS OR SUBMIT
-                # A PR TO REBOUND AND SET A VERSION DEPENDENCY ONCE ITS ACCEPTED
-                particle = sim.particles[j]
+                d, F, etheta, elongan, eincl = calculate_euler(sim, j)
 
-                sibling_particles = [sim.particles[k] for k in sibling_Ns[j]]
-                com_particle = com_phantom_particle(sibling_particles)
-
-                # get the orbit based on this com_particle as the primary component
-                orbit = particle.calculate_orbit(primary=com_particle)
-
-                # for instantaneous separation, we need the current separation
-                # from the sibling component in units of its instantaneous (?) sma
-                ds[j][i] = orbit.d / orbit.a
-                # for syncpar (F), assume that the rotational FREQUENCY will
-                # remain fixed - so we simply need to updated syncpar based
-                # on the INSTANTANEOUS orbital PERIOD.
-                Fs[j][i] = orbit.P / rotperiods[j]
-
-                # TODO: need to add np.pi for secondary component?
-                ethetas[j][i] = orbit.f + orbit.omega # true anomaly + periastron
-
-                elongans[j][i] = orbit.Omega
-
-                eincls[j][i] = orbit.inc
+                ds[j][i] = d
+                Fs[j][i] = F
+                ethetas[j][i] = etheta
+                elongans[j][i] = elongan
+                eincls[j][i] = eincl
 
 
     if return_roche_euler:
