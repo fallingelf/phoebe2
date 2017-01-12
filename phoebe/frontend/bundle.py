@@ -331,9 +331,6 @@ class Bundle(ParameterSet):
             the primary component of the outer-orbit
         :return: instantiated :class:`Bundle` object
         """
-        if not conf.devel:
-            raise NotImplementedError("'default_triple' not officially supported for this release.  Enable developer mode to test.")
-
         b = cls()
         b.add_star(component=starA)
         b.add_star(component=starB)
