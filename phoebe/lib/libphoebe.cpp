@@ -660,18 +660,17 @@ static PyObject *roche_area_volume(PyObject *self, PyObject *args, PyObject *key
   // Posibility of using approximation
   //
   
-  double 
-    w = delta*Omega0,
+  double
     b = (1 + q)*F*F*delta*delta*delta,
     w0 = 5*(q + std::cbrt(b*b)/4) - 29.554 - 5.26235*std::log(std::min(eps[0], eps[1])),
     av[2];                          // for results
     
-  if (choice == 0 && w >= std::max(10., w0)) {
+  if (choice == 0 && delta*Omega0 >= std::max(10., w0)) {
     
     // Approximation by using the series 
     // with empirically derived criterion 
     
-    gen_roche::area_volume_primary_approx_internal(av, res_choice, Omega0, w, q, b);
+    gen_roche::area_volume_primary_asymp(av, res_choice, Omega0, q, F, delta);
     
   } else { 
     
@@ -818,6 +817,8 @@ static PyObject *roche_area_volume(PyObject *self, PyObject *args, PyObject *key
 
 static PyObject *rotstar_area_volume(PyObject *self, PyObject *args, PyObject *keywds) {
   
+  const char *fname = "rotstar_area_volume";
+  
   //
   // Reading arguments
   //
@@ -846,7 +847,7 @@ static PyObject *rotstar_area_volume(PyObject *self, PyObject *args, PyObject *k
       &PyBool_Type, &o_lvolume
       )
     ) {
-    std::cerr << "rotstar_area_volume:Problem reading arguments\n";
+    std::cerr << fname << "::Problem reading arguments\n";
     return NULL;
   }
   
@@ -1025,6 +1026,8 @@ static PyObject *sphere_area_volume(PyObject *self, PyObject *args, PyObject *ke
 //#define DEBUG
 static PyObject *roche_Omega_at_vol(PyObject *self, PyObject *args, PyObject *keywds) {
   
+  const char * fname = "roche_Omega_at_vol";
+  
   //
   // Reading arguments
   //
@@ -1062,14 +1065,14 @@ static PyObject *roche_Omega_at_vol(PyObject *self, PyObject *args, PyObject *ke
       &max_iter
       )
     ) {
-    std::cerr << "roche_Omega_at_vol:Problem reading arguments\n";
+    std::cerr << fname << "::Problem reading arguments\n";
     return NULL;
   }
     
   bool b_Omega0 = !std::isnan(Omega0);
   
   if (!b_Omega0) {
-    std::cerr << "Currently not supporting lack of guessed Omega.\n";
+    std::cerr << fname << "::Currently not supporting lack of guessed Omega.\n";
     return NULL;
   }
      
@@ -1096,7 +1099,7 @@ static PyObject *roche_Omega_at_vol(PyObject *self, PyObject *args, PyObject *ke
   do {
 
     if (!gen_roche::lobe_xrange(xrange, choice, Omega, q, F, delta, true)){
-      std::cerr << "roche_area_volume:Determining lobe's boundaries failed\n";
+      std::cerr << fname << "::Determining lobe's boundaries failed\n";
       return NULL;
     }
     
@@ -1111,7 +1114,7 @@ static PyObject *roche_Omega_at_vol(PyObject *self, PyObject *args, PyObject *ke
        
       // calculate volume and derivate volume w.r.t to Omega
       for (int i = 0, m = m0; i < 2; ++i, m <<= 1) {
-        gen_roche::volume(p[i], 3, xrange, Omega, q, F, delta, m, polish);
+        gen_roche::area_volume_integration(p[i] - 1, 6, xrange, Omega, q, F, delta, m, polish);
         
         #if defined(DEBUG)
         std::cerr << "V:" <<  p[i][0] << '\t' << p[i][1] << '\n';
@@ -1177,7 +1180,7 @@ static PyObject *roche_Omega_at_vol(PyObject *self, PyObject *args, PyObject *ke
   } while (std::abs(dOmega) > accuracy + precision*Omega && ++it < max_iter);
    
   if (!(it < max_iter)){
-    std::cerr << "roche_Omega_at_vol: Maximum number of iterations exceeded\n";
+    std::cerr << fname << "::Maximum number of iterations exceeded\n";
     return NULL;
   }
   // We use the condition on the argument (= Omega) ~ constraining backward error, 
@@ -1185,7 +1188,7 @@ static PyObject *roche_Omega_at_vol(PyObject *self, PyObject *args, PyObject *ke
   
   return PyFloat_FromDouble(Omega);
 }
-#undef DEBUG
+//#undef DEBUG
 
 /*
   C++ wrapper for Python code:
@@ -1227,6 +1230,8 @@ static PyObject *roche_Omega_at_vol(PyObject *self, PyObject *args, PyObject *ke
 //#define DEBUG
 static PyObject *rotstar_Omega_at_vol(PyObject *self, PyObject *args, PyObject *keywds) {
   
+  const char *fname = "rotstar_Omega_at_vol";
+  
   //
   // Reading arguments
   //
@@ -1256,14 +1261,14 @@ static PyObject *rotstar_Omega_at_vol(PyObject *self, PyObject *args, PyObject *
       &max_iter
       )
     ) {
-    std::cerr << "rotstar_Omega_at_vol:Problem reading arguments\n";
+    std::cerr << fname <<"::Problem reading arguments\n";
     return NULL;
   }
     
   bool b_Omega0 = !std::isnan(Omega0);
   
   if (!b_Omega0) {
-    std::cerr << "Currently not supporting lack of guessed Omega.\n";
+    std::cerr << fname <<"::Currently not supporting lack of guessed Omega.\n";
     return NULL;
   }
     
@@ -1291,7 +1296,7 @@ static PyObject *rotstar_Omega_at_vol(PyObject *self, PyObject *args, PyObject *
   } while (std::abs(dOmega) > accuracy + precision*Omega && ++it < max_iter);
    
   if (!(it < max_iter)){
-    std::cerr << "rotstar_Omega_at_vol: Maximum number of iterations exceeded\n";
+    std::cerr << fname <<"::Maximum number of iterations exceeded\n";
     return NULL;
   }
   // We use the condition on the argument (= Omega) ~ constraining backward error, 
@@ -1316,10 +1321,11 @@ static PyObject *rotstar_Omega_at_vol(PyObject *self, PyObject *args, PyObject *
     g = roche_gradOmega(q, F, d, r)
    
    with parameters
-      q: float = M2/M1 - mass ratio
-      F: float - synchronicity parameter
-      d: float - separation between the two objects
-      r: 1-rank numpy array of length 3 = [x,y,z]
+   
+    q: float = M2/M1 - mass ratio
+    F: float - synchronicity parameter
+    d: float - separation between the two objects
+    r: 1-rank numpy array of length 3 = [x,y,z]
    
   
   and returns float
@@ -1429,9 +1435,9 @@ static PyObject *rotstar_gradOmega(PyObject *self, PyObject *args) {
     
     g = sphere_gradOmega(r)
    
-   with parameters
+  with parameters
    
-      r: 1-rank numpy array of length 3 = [x,y,z]
+    r: 1-rank numpy array of length 3 = [x,y,z]
   
   and returns float
   
@@ -1455,8 +1461,7 @@ static PyObject *sphere_gradOmega(PyObject *self, PyObject *args) {
     *x = (double*) PyArray_DATA(X),
     *g = new double [4],
     R = utils::hypot3(x),
-    F = 1/(R*R*R);   
-  
+    F = 1/(R*R*R);
   
   for (int i = 0; i < 3; ++i) g[i] = F*x[i];  
   g[3] = -1/R;
@@ -1482,13 +1487,13 @@ static PyObject *sphere_gradOmega(PyObject *self, PyObject *args) {
     
     g = roche_gradOmega_only(q, F, d, r)
    
-   with parameters
-      q: float = M2/M1 - mass ratio
-      F: float - synchronicity parameter
-      d: float - separation between the two objects
-      r: 1-rank numpy array of length 3 = [x,y,z]
+  with parameters
    
-  
+    q: float = M2/M1 - mass ratio
+    F: float - synchronicity parameter
+    d: float - separation between the two objects
+    r: 1-rank numpy array of length 3 = [x,y,z]
+   
   and returns float
   
     g : 1-rank numpy array = -grad Omega (x,y,z)
@@ -1531,12 +1536,11 @@ static PyObject *roche_gradOmega_only(PyObject *self, PyObject *args) {
     
     g = rotstar_gradOmega_only(omega, r)
    
-   with parameters
+  with parameters
     
-      omega: float - parameter of the potential
-      r: 1-rank numpy array of length 3 = [x,y,z]
-   
-  
+    omega: float - parameter of the potential
+    r: 1-rank numpy array of length 3 = [x,y,z]
+ 
   and returns float
   
     g : 1-rank numpy array = -grad Omega (x,y,z)
@@ -1568,8 +1572,6 @@ static PyObject *rotstar_gradOmega_only(PyObject *self, PyObject *args) {
   return pya;
 }
 
-
-
 /*
   C++ wrapper for Python code:
   
@@ -1582,11 +1584,10 @@ static PyObject *rotstar_gradOmega_only(PyObject *self, PyObject *args) {
     
     g = sphere_gradOmega_only(r)
    
-   with parameters
+  with parameters
     
-      r: 1-rank numpy array of length 3 = [x,y,z]
+    r: 1-rank numpy array of length 3 = [x,y,z]
    
-  
   and returns float
   
     g : 1-rank numpy array = -grad Omega (x,y,z)
@@ -1632,12 +1633,13 @@ static PyObject *sphere_gradOmega_only(PyObject *self, PyObject *args) {
     
     Omega0 = roche_Omega(q, F, d, r)
    
-   with parameters
-      q: float = M2/M1 - mass ratio
-      F: float - synchronicity parameter
-      d: float - separation between the two objects
-      r: 1-rank numpy array of length 3 = [x,y,z]
-   
+  with parameters
+
+    q: float = M2/M1 - mass ratio
+    F: float - synchronicity parameter
+    d: float - separation between the two objects
+    r: 1-rank numpy array of length 3 = [x,y,z]
+ 
   
   and returns a float
   
@@ -1674,10 +1676,10 @@ static PyObject *roche_Omega(PyObject *self, PyObject *args) {
     
     Omega0 = rotstar_Omega(omega, r)
    
-   with parameters
+  with parameters
   
-      omega: float - parameter of the potential
-      r: 1-rank numpy array of length 3 = [x,y,z]
+    omega: float - parameter of the potential
+    r: 1-rank numpy array of length 3 = [x,y,z]
    
   
   and returns a float
@@ -1747,10 +1749,15 @@ static PyObject *sphere_Omega(PyObject *self, PyObject *args) {
 /*
   C++ wrapper for Python code:
 
-    Marching meshing of Roche lobes implicitely defined by generalized 
-    Kopal potential:
+    Marching meshing of Roche lobes implicitely defined 
+       
+    Omega_0 = Omega(x,y,z)
     
-      Omega_0 = Omega(x,y,z)
+    by generalized Kopal potential:
+    
+    Omega(x,y,z) =  1/r1 + q [1/r2 - x/delta^2] + 1/2 F^2(1 + q) (x^2 + y^2)
+    r1 = sqrt(x^2 + y^2 + z^2)
+    r1 = sqrt((x-delta)^2 + y^2 + z^2)
     
   Python:
 
@@ -4424,17 +4431,6 @@ static PyObject *mesh_radiosity_redistrib_problem_nbody_convex(
   // Reading support type
   //
 
-  std::vector<Tmat_elem_nbody<double>> Fmat;
-    
-  triangle_mesh_radiosity_matrix_vertices_nbody_convex(
-    V, Tr, NatV, A, LDmod, Fmat);
- 
-  std::cerr << "Fmat.size=" << Fmat.size() << " V.size=" << V.size() << '\n';
-  for (int i = 0; i < 2; ++i) std::cerr << "V[i].size=" << V[i].size() << '\n';
- 
-  for (auto && ld: LDmod) delete ld;
-  LDmod.clear();
-  
   int support; 
   {
     char *s = PyString_AsString(osupport);
@@ -5038,7 +5034,9 @@ static PyObject *roche_reprojecting_vertices(PyObject *self, PyObject *args, PyO
 */
 
 static PyObject *roche_horizon(PyObject *self, PyObject *args, PyObject *keywds) {
-
+  
+  const char *fname = "roche_horizon";
+  
   //
   // Reading arguments
   //
@@ -5070,7 +5068,7 @@ static PyObject *roche_horizon(PyObject *self, PyObject *args, PyObject *keywds)
       &q, &F, &d, &Omega0,
       &length,
       &choice)){
-    std::cerr << "roche_horizon::Problem reading arguments\n";
+    std::cerr << fname << "::Problem reading arguments\n";
     return NULL;
   }
   
@@ -5085,7 +5083,7 @@ static PyObject *roche_horizon(PyObject *self, PyObject *args, PyObject *keywds)
   //
   if (!gen_roche::point_on_horizon(p, view, choice, Omega0, q, F, d, max_iter)) {
     std::cerr 
-    << "roche_horizon::Convergence to the point on horizon failed\n";
+    << fname << "::Convergence to the point on horizon failed\n";
     return NULL;
   }
   
@@ -5109,7 +5107,7 @@ static PyObject *roche_horizon(PyObject *self, PyObject *args, PyObject *keywds)
  
   if (!horizon.calc(H, view, p, dt)) {
    std::cerr 
-    << "roche_horizon::Convergence to the point on horizon failed\n";
+    << fname << "::Convergence to the point on horizon failed\n";
     return NULL;
   }
 
@@ -5141,7 +5139,9 @@ static PyObject *roche_horizon(PyObject *self, PyObject *args, PyObject *keywds)
 */
 
 static PyObject *rotstar_horizon(PyObject *self, PyObject *args, PyObject *keywds) {
-
+  
+  const char *fname = "rotstar_horizon";
+  
   //
   // Reading arguments
   //
@@ -5166,7 +5166,7 @@ static PyObject *rotstar_horizon(PyObject *self, PyObject *args, PyObject *keywd
       &PyArray_Type, &oV, 
       &omega, &Omega0,
       &length)){
-    std::cerr << "rotstar_horizon::Problem reading arguments\n";
+    std::cerr << fname << "::Problem reading arguments\n";
     return NULL;
   }
 
@@ -5181,7 +5181,7 @@ static PyObject *rotstar_horizon(PyObject *self, PyObject *args, PyObject *keywd
   //
   if (!rot_star::point_on_horizon(p, view, Omega0, omega)) {
     std::cerr 
-    << "rotstar_horizon::Convergence to the point on horizon failed\n";
+    << fname << "::Convergence to the point on horizon failed\n";
     return NULL;
   }
   
@@ -5201,7 +5201,7 @@ static PyObject *rotstar_horizon(PyObject *self, PyObject *args, PyObject *keywd
  
   if (!horizon.calc(H, view, p, dt)) {
    std::cerr 
-    << "rotstar_horizon::Convergence to the point on horizon failed\n";
+    << fname << "::Convergence to the point on horizon failed\n";
     return NULL;
   }
 
@@ -6845,18 +6845,23 @@ static PyMethodDef Methods[] = {
     "Calculate the gradient and the value of the generalized Kopal potentil"
     " at given point [x,y,z] for given values of q, F and d."},  
 
-    { "rotstar_gradOmega", 
+  { "rotstar_gradOmega", 
     rotstar_gradOmega,   
     METH_VARARGS, 
     "Calculate the gradient and the value of the rotating star potential"
     " at given point [x,y,z] for given values of omega."},  
 
+  { "sphere_gradOmega", 
+    sphere_gradOmega,   
+    METH_VARARGS, 
+    "Calculate the gradient of the potential of the sphere"
+    " at given point [x,y,z]."},  
 // --------------------------------------------------------------------
 
   { "roche_Omega", 
     roche_Omega,   
     METH_VARARGS, 
-    "Calculate the value of the generalized Kopal potentil"
+    "Calculate the value of the generalized Kopal potential"
     " at given point [x,y,z] for given values of q, F and d."},  
 
   { "rotstar_Omega", 
@@ -6872,11 +6877,6 @@ static PyMethodDef Methods[] = {
     " at given point [x,y,z]."},  
 
 
-  { "sphere_gradOmega", 
-    sphere_gradOmega,   
-    METH_VARARGS, 
-    "Calculate the gradient of the potential of the sphere"
-    " at given point [x,y,z]."},  
     
 // --------------------------------------------------------------------
     
