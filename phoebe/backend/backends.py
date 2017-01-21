@@ -1,7 +1,7 @@
 
 import numpy as np
 import commands
-
+import tempfile
 from phoebe.parameters import dataset as _dataset
 from phoebe.parameters import ParameterSet
 from phoebe import dynamics
@@ -579,7 +579,7 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
                     ld_func = b.get_value(qualifier='ld_func', component=component, dataset=dataset, context='dataset')
                     ld_coeffs = b.get_value(qualifier='ld_coeffs', component=component, dataset=dataset, context='dataset', check_visible=False)
 
-                    # TODO: system.get_body(component) needs to be smart enough to handle primary/secondary within common_envelope... and then smart enough to handle the pblum_scale
+                    # TODO: system.get_body(component) needs to be smart enough to handle primary/secondary within contact_envelope... and then smart enough to handle the pblum_scale
 
                     system.get_body(component).compute_pblum_scale(dataset, pblum, ld_func=ld_func, ld_coeffs=ld_coeffs, component=component)
                 else:
@@ -985,7 +985,6 @@ def legacy(b, compute, times=[], **kwargs): #, **kwargs):#(b, compute, **kwargs)
                     key_val = np.array(zip(prot_val, prot_val, prot_val, prot_val, -prot_val, -prot_val, -prot_val, -prot_val)).flatten()
                 else:
                     key_val = np.array(zip(prot_val, prot_val, prot_val, prot_val, prot_val, prot_val, prot_val, prot_val)).flatten()
-
                 if key[:2] =='gr':
                     grtotn = grtot[int(key[-1])-1]
 
@@ -1056,16 +1055,27 @@ def legacy(b, compute, times=[], **kwargs): #, **kwargs):#(b, compute, **kwargs)
     # print primary, secondary
     #make phoebe 1 file
 
-    # TODO BERT: this really should be a random name (tmpfile) so two instances won't clash
-    io.pass_to_legacy(b, filename='_tmp_legacy_inp', compute=compute, **kwargs)
+
+    #create temporary file
+    tmp_file = tempfile.NamedTemporaryFile()
+#   testing
+#    filename = 'check.phoebe'
+#   real
+    io.pass_to_legacy(b, filename=tmp_file.name, compute=compute, **kwargs)
+#   testing
+#    io.pass_to_legacy(b, filename=filename, compute=compute, **kwargs)
     phb1.init()
     try:
         phb1.configure()
     except SystemError:
         raise SystemError("PHOEBE config failed: try creating PHOEBE config file through GUI")
-    phb1.open('_tmp_legacy_inp')
- #   phb1.updateLD()
+#   real
+    phb1.open(tmp_file.name)
+#   testing
+#    phb1.open(filename)
+#    phb1.updateLD()
     # TODO BERT: why are we saving here?
+#   testing
 #    phb1.save('after.phoebe')
     lcnum = 0
     rvnum = 0
@@ -1192,20 +1202,20 @@ def legacy(b, compute, times=[], **kwargs): #, **kwargs):#(b, compute, **kwargs)
             elif dep == 'secondary':
                 comp = secondary
 
-            proximity = computeparams.filter(qualifier ='rv_method', component=comp, dataset=rvid).get_value() 
+            proximity = computeparams.filter(qualifier ='rv_method', component=comp, dataset=rvid).get_value()
             if proximity == 'flux-weighted':
                 rveffects = 1
             else:
-                rveffects = 0   
+                rveffects = 0
 
             if dep == 'primary':
-                print 'primary'
+                # print 'primary'
                 phb1.setpar('phoebe_proximity_rv1_switch', rveffects)
                 rv = np.array(phb1.rv1(tuple(time.tolist()), 0))
                 rvnum = rvnum+1
 
             elif dep == 'secondary':
-                print 'secondary'
+                # print 'secondary'
                 phb1.setpar('phoebe_proximity_rv2_switch', rveffects)
                 rv = np.array(phb1.rv2(tuple(time.tolist()), 0))
                 rvnum = rvnum+1
@@ -1214,7 +1224,7 @@ def legacy(b, compute, times=[], **kwargs): #, **kwargs):#(b, compute, **kwargs)
 
 
                  #print "***", u.solRad.to(u.km)
-            this_syn.set_value(qualifier='rvs', value=rv*u.km/u.s)                     
+            this_syn.set_value(qualifier='rvs', value=rv*u.km/u.s)
 #########################################################################################################
 #            if rvid == phb1.getpar('phoebe_rv_id', 0):
 

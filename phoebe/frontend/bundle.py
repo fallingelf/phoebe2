@@ -241,7 +241,7 @@ class Bundle(ParameterSet):
         return cls()
 
     @classmethod
-    def from_legacy(cls, filename):
+    def from_legacy(cls, filename, add_compute_legacy=False, add_compute_phoebe=True):
         """Load a bundle from a PHOEBE 1.0 Legacy file.
 
         This is a constructor so should be called as:
@@ -251,7 +251,7 @@ class Bundle(ParameterSet):
         :parameter str filename: relative or full path to the file
         :return: instantiated :class:`Bundle` object
         """
-        return io.load_legacy(filename)
+        return io.load_legacy(filename, add_compute_legacy, add_compute_phoebe)
 
     @classmethod
     def default_star(cls, starA='starA'):
@@ -268,11 +268,12 @@ class Bundle(ParameterSet):
         b = cls()
         b.add_star(component=starA)
         b.set_hierarchy(_hierarchy.component(b[starA]))
+        b.add_compute()
         return b
 
     @classmethod
     def default_binary(cls, starA='primary', starB='secondary', orbit='binary',
-                       overcontact=False):
+                       contact_binary=False):
         """Load a bundle with a default binary as the system.
 
         primary - secondary
@@ -287,26 +288,29 @@ class Bundle(ParameterSet):
         b.add_star(component=starA)
         b.add_star(component=starB)
         b.add_orbit(component=orbit)
-        if overcontact:
-            b.add_component('envelope', component='common_envelope')
+        if contact_binary:
+            b.add_component('envelope', component='contact_envelope')
             b.set_hierarchy(_hierarchy.binaryorbit,
                             b[orbit],
                             b[starA],
                             b[starB],
-                            b['common_envelope'])
+                            b['contact_envelope'])
         else:
             b.set_hierarchy(_hierarchy.binaryorbit,
                             b[orbit],
                             b[starA],
                             b[starB])
 
+        b.add_compute()
+
         return b
+
 
     @classmethod
     def default_triple(cls, inner_as_primary=True, inner_as_overcontact=False,
                        starA='starA', starB='starB', starC='starC',
                        inner='inner', outer='outer',
-                       common_envelope='common_envelope'):
+                       contact_envelope='contact_envelope'):
         """Load a bundle with a default triple system.
 
         Set inner_as_primary based on what hierarchical configuration you want.
@@ -338,11 +342,11 @@ class Bundle(ParameterSet):
         b.add_orbit(component=outer, period=10)
 
         if inner_as_overcontact:
-            b.add_envelope(component=common_envelope)
+            b.add_envelope(component=contact_envelope)
             inner_hier = _hierarchy.binaryorbit(b[inner],
                                            b[starA],
                                            b[starB],
-                                           b[common_envelope])
+                                           b[contact_envelope])
         else:
             inner_hier = _hierarchy.binaryorbit(b[inner], b[starA], b[starB])
 
@@ -357,6 +361,8 @@ class Bundle(ParameterSet):
 
         # TODO: does this constraint need to be rebuilt when things change?
         # (ie in set_hierarchy)
+
+        b.add_compute()
 
         return b
 
@@ -574,6 +580,8 @@ class Bundle(ParameterSet):
         self._check_label(new_component)
         # changing hierarchy must be called first since it needs to access
         # the kind of old_component
+        if len([c for c in self.components if new_component in c]):
+            logger.warning("hierarchy may not update correctly with new component")
         self.hierarchy.change_component(old_component, new_component)
         for param in self.filter(component=old_component).to_list():
             param._component = new_component
@@ -581,6 +589,7 @@ class Bundle(ParameterSet):
             for k, v in param.constraint_kwargs.items():
                 if v == old_component:
                     param._constraint_kwargs[k] = new_component
+
 
 
     def get_setting(self, twig=None, **kwargs):
@@ -869,7 +878,7 @@ class Bundle(ParameterSet):
                                         constraint=self._default_label('comp_sma', context='constraint'))
 
 
-                if not self.hierarchy.is_overcontact(component):
+                if not self.hierarchy.is_contact_binary(component):
 
                     logger.info('re-creating rotation_period constraint for {}'.format(component))
                     # TODO: will this cause problems if the constraint has been flipped?
@@ -905,7 +914,7 @@ class Bundle(ParameterSet):
                                             constraint=self._default_label('incl_aligned', context='constraint'))
 
 
-            if not self.hierarchy.is_overcontact(component) or self.hierarchy.get_kind_of(component)=='envelope':
+            if not self.hierarchy.is_contact_binary(component) or self.hierarchy.get_kind_of(component)=='envelope':
                 # potential constraint shouldn't be done for STARS in OVERCONTACTS
 
                 logger.info('re-creating potential constraint for {}'.format(component))
@@ -1165,6 +1174,13 @@ class Bundle(ParameterSet):
                         atm = self.get_value(qualifier='atm', component=component, compute=compute, context='compute')
                         if atm != 'ck2004':
                             return False, "ld_func='interp' only supported by atm='ck2004'"
+
+        # mesh-consistency checks
+        for compute in self.computes:
+            mesh_methods = [p.get_value() for p in self.filter(qualifier='mesh_method', compute=compute, force_ps=True).to_list()]
+            if 'wd' in mesh_methods:
+                if len(set(mesh_methods)) > 1:
+                    return False, "all (or none) components must use mesh_method='wd'"
 
         #### WARNINGS ONLY ####
         # let's check teff vs gravb_bol
@@ -1838,7 +1854,7 @@ class Bundle(ParameterSet):
         kwargs['qualifier'] = None
         # Let's also avoid the possibility of accidentally deleting system
         # parameters, etc
-        kwargs.setdefault('context', ['dataset', 'model', 'constraint'])
+        kwargs.setdefault('context', ['dataset', 'model', 'constraint', 'compute'])
         # and lastly, let's handle deps if kind was passed
         kind = kwargs.get('kind', None)
 
@@ -2045,6 +2061,14 @@ class Bundle(ParameterSet):
         :parameter **kwargs: any other tags to do the filter
             (except twig or context)
         """
+        # let's run delayed constraints first to ensure that we get the same
+        # results in interactive and non-interactive modes as well as to make
+        # sure we don't have delayed constraints for the constraint we're
+        #  about to remove.  This could perhaps be optimized by searching
+        #  for this/these constraints and only running/removing those, but
+        #  probably isn't worth the savings.
+        self.run_delayed_constraints()
+
         kwargs['twig'] = twig
         redo_kwargs = deepcopy(kwargs)
 
@@ -2366,6 +2390,13 @@ class Bundle(ParameterSet):
         # if interactive mode was ever off, let's make sure all constraints
         # have been run before running system checks or computing the model
         self.run_delayed_constraints()
+
+        # any kwargs that were used just to filter for get_compute should  be
+        # removed so that they aren't passed on to all future get_value(...
+        # **kwargs) calls
+        for k in parameters._meta_fields_filter:
+            if k in kwargs.keys():
+                dump = kwargs.pop(k)
 
         # we'll wait to here to run kwargs and system checks so that
         # add_compute is already called if necessary
