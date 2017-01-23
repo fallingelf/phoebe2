@@ -1474,7 +1474,7 @@ static PyObject *sphere_gradOmega(PyObject *self, PyObject *args) {
   
   return pya;
 }
- 
+
 /*
   C++ wrapper for Python code:
   
@@ -3682,7 +3682,7 @@ bool LDmodelFromListOfTuples(
               "nonlinear"   3 parameters
               "logarithmic" 2 parameters
               "square_root" 2 parameters
-              "claret"      4 parameters
+              "power"      4 parameters
               "interp"      interpolation data  TODO !!!!
               
     LDidx[]: 1-rank numpy array of indices of LD models used on each triangle/vertex
@@ -3944,7 +3944,7 @@ static PyObject *mesh_radiosity_problem(
               "nonlinear"   3 parameters
               "logarithmic" 2 parameters
               "square_root" 2 parameters
-              "claret"      4 parameters
+              "power"       4 parameters
               "interp"      interpolation data  TODO !!!!
               
                
@@ -4203,7 +4203,7 @@ static PyObject *mesh_radiosity_problem_nbody_convex(
               "nonlinear"   3 parameters
               "logarithmic" 2 parameters
               "square_root" 2 parameters
-              "claret"      4 parameters
+              "power"       4 parameters
               "interp"      interpolation data  TODO !!!!
  
     Dmod = {Dmod1, Dmod2, ...}: list of dictionaries of element of the format
@@ -6822,7 +6822,7 @@ static PyMethodDef Methods[] = {
     (PyCFunction)sphere_area_volume,   
     METH_VARARGS|METH_KEYWORDS, 
     "Determine the area and volume of the sphere for given a R."},
-    
+
 // --------------------------------------------------------------------
  
   { "roche_Omega_at_vol", 
@@ -6876,8 +6876,6 @@ static PyMethodDef Methods[] = {
     "Calculate the value of the potential of the sphere "
     " at given point [x,y,z]."},  
 
-
-    
 // --------------------------------------------------------------------
     
   { "roche_gradOmega_only", 

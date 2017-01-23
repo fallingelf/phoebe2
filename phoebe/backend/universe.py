@@ -334,12 +334,8 @@ class System(object):
 
             fluxes_intrins_and_refl_per_body = stuff['radiosity']
             # exitance_intrins_and_refl_per_body = stuff['update-exitance']
-
-            intens_intrins_and_refl_per_body = [fluxes_intrins_and_refl / ldint for fluxes_intrins_and_refl, ldint in zip(fluxes_intrins_and_refl_per_body, ldint_per_body)]
-
-            intens_intrins_flat = meshes.get_column_flat('abs_normal_intensities:bol', computed_type='for_computations')
-            intens_intrins_and_refl_flat = meshes.pack_column_flat(intens_intrins_and_refl_per_body)
-
+            
+            fluxes_intrins_and_refl_flat = meshes.pack_column_flat(fluxes_intrins_and_refl_per_body)
 
         else:
             logger.info("handling reflection (general case), method='{}'".format(self.irrad_method))
@@ -354,10 +350,8 @@ class System(object):
             ld_func_and_coeffs = [tuple([body.ld_func['bol']] + [np.asarray(body.ld_coeffs['bol'])]) for body in self.bodies]
             ld_inds_flat = meshes.pack_column_flat({body.comp_no: np.full(fluxes.shape, body.comp_no-1) for body, fluxes in zip(self.bodies, fluxes_intrins_per_body)})
 
-            # TODO: get the correct index for each vertex - maybe something like meshes.get_column_flat('comp'),
-            # then remove the NotImplementedError and test
-            ld_inds = np.zeros(irrad_frac_refls_flat.shape)
-            # ld_inds = meshes.pack_column_flat({body.name: body.comp_no for body in self.bodies})
+            ld_func_and_coeffs = [tuple([body.ld_func['bol']] + [np.asarray(body.ld_coeffs['bol'])]) for body in self.bodies]
+            ld_inds_flat = meshes.pack_column_flat({body.comp_no: np.full(fluxes.shape, body.comp_no-1) for body, fluxes in zip(self.bodies, fluxes_intrins_per_body)})
 
             # TODO: add support for wd meshes by changing support to 'triangles'
             # and once implemented for convex and general case remove error statement above
@@ -368,12 +362,11 @@ class System(object):
                                                                             irrad_frac_refls_flat,
                                                                             fluxes_intrins_flat,
                                                                             ld_func_and_coeffs,
-                                                                            ld_inds,
+                                                                            ld_inds_flat,
                                                                             self.irrad_method.title(),
                                                                             support=b'vertices'
                                                                             )
 
-            intens_intrins_and_refl_flat = fluxes_intrins_and_refl_flat / ldint_flat
 
         teffs_intrins_flat = meshes.get_column_flat('teffs', computed_type='for_computations')
 
