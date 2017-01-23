@@ -178,6 +178,13 @@ class Bundle(ParameterSet):
         f.close()
         return cls(data)
 
+    def copy(self):
+        """
+        Make a copy of the Bundle
+        """
+        return Bundle(self.to_json())
+
+
     @classmethod
     def from_server(cls, bundleid, server='http://localhost:5555',
                     as_client=True):

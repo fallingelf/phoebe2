@@ -933,6 +933,12 @@ class ParameterSet(object):
 
         return filename
 
+    def copy(self):
+        """
+        Make a copy of the ParameterSet
+        """
+        return ParameterSet(self.to_json())
+
     def ui(self, client='http://localhost:4200', **kwargs):
         """
         [NOT IMPLEMENTED]
