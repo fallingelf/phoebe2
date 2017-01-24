@@ -569,6 +569,14 @@ def keplers_third_law_hierarchical(b, orbit1, orbit2, solve_for=None, **kwargs):
     if solve_for in [None, sma1]:
         lhs = sma1
         rhs = (sma2**3 * qthing1 * period1**2/period2**2)**(1./3)
+    elif solve_for in [q1]:
+        lhs = q1
+        if hier.get_primary_or_secondary(orbit2_ps.component) == 'primary':
+            rhs = (sma1**3/sma2**3) * (period2**2/period1**2) - 1
+        else:
+            rhs = ((sma1**3/sma2**3) * (period2**2/period1**2) - 1)**-1
+
+
     else:
         # TODO: add other options to solve_for
         raise NotImplementedError
