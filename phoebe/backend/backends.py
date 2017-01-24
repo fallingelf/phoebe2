@@ -445,13 +445,14 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
     distance = b.get_value(qualifier='distance', context='system', unit=u.m)
     t0 = b.get_value(qualifier='t0', context='system', unit=u.d)
 
-    if len(starrefs)==1 and computeparams.get_value('distortion_method', component=starrefs[0], **kwargs) in ['roche']:
-        raise ValueError("distortion_method='{}' not valid for single star".format(computeparams.get_value('distortion_method', component=starrefs[0], **kwargs)))
+    distortion_method = computeparams.get_value('distortion_method', component=starrefs[0], **kwargs)
+    if len(starrefs)==1 and distortion_method in ['roche']:
+        raise ValueError("distortion_method='{}' not valid for single star".format(distortion_method))
 
     if len(meshablerefs) > 1 or hier.get_kind_of(meshablerefs[0])=='envelope':
         if dynamics_method in ['nbody', 'rebound']:
-            t0, xs0, ys0, zs0, vxs0, vys0, vzs0, inst_ds0, inst_Fs0, ethetas0, elongans0, eincls0 = dynamics.nbody.dynamics_from_bundle(b, [t0], compute, return_roche_euler=True, **kwargs)
-            ts, xs, ys, zs, vxs, vys, vzs, inst_ds, inst_Fs, ethetas, elongans, eincls = dynamics.nbody.dynamics_from_bundle(b, times, compute, return_roche_euler=True, **kwargs)
+            t0, xs0, ys0, zs0, vxs0, vys0, vzs0, inst_ds0, inst_Fs0, ethetas0, elongans0, eincls0, inst_periods0, inst_smas0, inst_eccs0, inst_per0s0, inst_long_ans0, inst_incls0, inst_t0_perpasses0 = dynamics.nbody.dynamics_from_bundle(b, [t0], compute, return_roche_euler=True, **kwargs)
+            ts, xs, ys, zs, vxs, vys, vzs, inst_ds, inst_Fs, ethetas, elongans, eincls, inst_periods, inst_smas, inst_eccs, inst_per0s, inst_long_ans, inst_incls, inst_t0_perpasses = dynamics.nbody.dynamics_from_bundle(b, times, compute, return_roche_euler=True, **kwargs)
 
         elif dynamics_method == 'bs':
             # if distortion_method == 'roche':
@@ -460,9 +461,9 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
             # TODO: pass stepsize
             # TODO: pass orbiterror
             # TODO: make sure that this takes systemic velocity and corrects positions and velocities (including ltte effects if enabled)
-            t0, xs0, ys0, zs0, vxs0, vys0, vzs0, inst_ds0, inst_Fs0, ethetas0, elongans0, eincls0 = dynamics.nbody.dynamics_from_bundle_bs(b, [t0], compute, return_roche_euler=True, **kwargs)
+            t0, xs0, ys0, zs0, vxs0, vys0, vzs0, inst_ds0, inst_Fs0, ethetas0, elongans0, eincls0, inst_periods0, inst_smas0, inst_eccs0, inst_per0s0, inst_long_ans0, inst_incls0, inst_t0_perpasses0 = dynamics.nbody.dynamics_from_bundle_bs(b, [t0], compute, return_roche_euler=True, **kwargs)
             # ethetas0, elongans0, eincls0 = None, None, None
-            ts, xs, ys, zs, vxs, vys, vzs, inst_ds, inst_Fs, ethetas, elongans, eincls = dynamics.nbody.dynamics_from_bundle_bs(b, times, compute, return_roche_euler=True, **kwargs)
+            ts, xs, ys, zs, vxs, vys, vzs, inst_ds, inst_Fs, ethetas, elongans, eincls, inst_periods, inst_smas, inst_eccs, inst_per0s, inst_long_ans, inst_incls, inst_t0_perpasses = dynamics.nbody.dynamics_from_bundle_bs(b, times, compute, return_roche_euler=True, **kwargs)
             # ethetas, elongans, eincls = None, None, None
 
 
@@ -621,12 +622,30 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
                 Fi = dynamics.at_i(inst_Fs, i)
                 # by passing these along to update_positions, volume conservation will
                 # handle remeshing the stars
+
+                # we'll also store instantaneous keplerian elements so they
+                # can be exposed to the user via the mesh dataset
+                periodi = dynamics.at_i(inst_periods, i)
+                smai = dynamics.at_i(inst_smas, i)
+                ecci = dynamics.at_i(inst_eccs, i)
+                per0i = dynamics.at_i(inst_per0s, i)
+                long_ani = dynamics.at_i(inst_long_ans, i)
+                incli = dynamics.at_i(inst_incls, i)
+                t0_perpassi = dynamics.at_i(inst_t0_perpasses, i)
+
             else:
                 # then allow d to be determined from orbit and original sma
                 # and F to remain fixed
                 di = None
                 Fi = None
 
+                periodi = None
+                smai = None
+                ecci = None
+                per0i = None
+                long_ani = None
+                inclsi = None
+                t0_perpassi = None
 
 
             # TODO: eventually we can pass instantaneous masses and sma as kwargs if they're time dependent
@@ -778,6 +797,20 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
                     this_syn['horizon_xs'] = horizons[cind][:,0]
                     this_syn['horizon_ys'] = horizons[cind][:,1]
                     this_syn['horizon_zs'] = horizons[cind][:,2]
+
+                if dynamics_method in ['nbody', 'rebound'] and distortion_method == 'roche':
+                    this_syn['d'] = di[cind]
+                    this_syn['syncpar'] = Fi[cind]
+
+
+                    # print "***", periodi, smai, ecci, per0i, long_ani, incli, perpassi
+                    this_syn['period'] = periodi[cind] * u.d
+                    this_syn['sma'] = smai[cind] * u.solRad
+                    this_syn['ecc'] = ecci[cind]
+                    this_syn['per0'] = per0i[cind] * u.rad
+                    this_syn['long_an'] = long_ani[cind] * u.rad
+                    this_syn['incl'] = incli[cind] * u.rad
+                    this_syn['t0_perpass'] = t0_perpassi[cind] * u.d
 
                 # Analytic horizon
                 if do_horizon:
@@ -1047,7 +1080,7 @@ def legacy(b, compute, times=[], **kwargs): #, **kwargs):#(b, compute, **kwargs)
 
 #    starrefs  = hier.get_stars()
 #    orbitrefs = hier.get_orbits()
-    
+
     stars = b.hierarchy.get_stars()
     primary, secondary = stars
     #need for protomesh
@@ -1193,11 +1226,11 @@ def legacy(b, compute, times=[], **kwargs): #, **kwargs):#(b, compute, **kwargs)
             elif dep == 'secondary':
                 comp = secondary
 
-            proximity = computeparams.filter(qualifier ='rv_method', component=comp, dataset=rvid).get_value() 
+            proximity = computeparams.filter(qualifier ='rv_method', component=comp, dataset=rvid).get_value()
             if proximity == 'flux-weighted':
                 rveffects = 1
             else:
-                rveffects = 0   
+                rveffects = 0
 
             if dep == 'primary':
                 print 'primary'
@@ -1215,7 +1248,7 @@ def legacy(b, compute, times=[], **kwargs): #, **kwargs):#(b, compute, **kwargs)
 
 
                  #print "***", u.solRad.to(u.km)
-            this_syn.set_value(qualifier='rvs', value=rv*u.km/u.s)                     
+            this_syn.set_value(qualifier='rvs', value=rv*u.km/u.s)
 #########################################################################################################
 #            if rvid == phb1.getpar('phoebe_rv_id', 0):
 

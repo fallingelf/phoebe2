@@ -1043,6 +1043,8 @@ class Mesh(ScaledProtoMesh):
         norm_ks = ['vnormals', 'tnormals'] #, 'cnormals']
         vel_ks = ['velocities']
 
+        # print "*** place_in_orbit", pos, euler
+
         # NOTE: we do velocities first since they require the positions WRT
         # the star (not WRT the system).  Will need to keep this in mind if we
         # eventually support incremental transformations.

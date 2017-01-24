@@ -87,6 +87,8 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
 
     """
 
+    # TODO: need to make a non-bundle version of this
+
     b.run_delayed_constraints()
 
     hier = b.hierarchy
@@ -155,7 +157,10 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
         particle = sim.particles[j]
 
         sibling_particles = [sim.particles[k] for k in sibling_Ns[j]]
+        # NOTE: this isn't the com of THIS system, but rather the COM
+        # of the sibling (if it consists of more than 1 star)
         com_particle = com_phantom_particle(sibling_particles)
+        # com_particle = com_phantom_particle([particle]+sibling_particles)
 
         # get the orbit based on this com_particle as the primary component
         orbit = particle.calculate_orbit(primary=com_particle)
@@ -174,14 +179,25 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
         F = orbit.P / rotperiods[j]
 
         # TODO: need to add np.pi for secondary component?
-        etheta = orbit.f + orbit.omega # true anomaly + periastron
+        etheta = orbit.f + orbit.omega + np.pi # true anomaly + periastron
 
-        elongan = orbit.Omega
+        elongan = orbit.Omega - np.pi # TODO: need to check if this is correct, this set to orbit.Omega seemed to be causing the offset issue
 
         eincl = orbit.inc
 
-        return d, F, etheta, elongan, eincl
+        # print "*** calculate_euler ind: {}, etheta: {} [{}] ({}, {}), sibling_inds: {}, self: ({}, {}, {}), sibling: ({}, {}, {})".format(j, etheta, etheta+np.pi if etheta<np.pi else etheta-np.pi, orbit.f, orbit.omega, sibling_Ns[j], particle.x, particle.y, particle.z, com_particle.x, com_particle.y, com_particle.z)
 
+        period = orbit.P
+        sma = orbit.a
+        ecc = orbit.e
+        per0 = orbit.omega
+        long_an = orbit.Omega
+        incl = orbit.inc
+        t0_perpass = orbit.T
+
+        # TODO: all after eincl are only required if requesting to store in the
+        # mesh... but shouldn't be taking too much time to calculate and store
+        return d, F, etheta, elongan, eincl, period, sma, ecc, per0, long_an, incl, t0_perpass
 
     times = np.asarray(times) - t0
 
@@ -195,11 +211,13 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
         params = rebx.add_gr_full()
 
     sim.integrator = integrator
-    # NOTE: according to rebound docs: "stepsize will change for adaptive integrators such as IAS15"
+    # NOTE: according to rebound docs: "stepsize will change for adaptive
+    # integrators such as IAS15"
     sim.dt = stepsize
 
     sibling_Ns = []
     for i,starref in enumerate(starrefs):
+        # print "***", i, starref
 
         # TODO: do this in rsol instead of AU so we don't have to convert the particles back and forth below?
         mass = b.get_value('mass', u.solMass, component=starref, context='component') * c.G.to('AU3 / (Msun d2)').value
@@ -250,6 +268,14 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
         elongans = [np.zeros(times.shape) for j in range(sim.N)]
         eincls = [np.zeros(times.shape) for j in range(sim.N)]
 
+        periods = [np.zeros(times.shape) for j in range(sim.N)]
+        smas = [np.zeros(times.shape) for j in range(sim.N)]
+        eccs = [np.zeros(times.shape) for j in range(sim.N)]
+        per0s = [np.zeros(times.shape) for j in range(sim.N)]
+        long_ans = [np.zeros(times.shape) for j in range(sim.N)]
+        incls = [np.zeros(times.shape) for j in range(sim.N)]
+        t0_perpasses = [np.zeros(times.shape) for j in range(sim.N)]
+
     for i,time in enumerate(times):
 
         # print "*** integrating to t=", time
@@ -262,6 +288,28 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
 
         for j in range(sim.N):
 
+            # get roche/euler information BEFORE making LTTE adjustments
+            if return_roche_euler:
+
+
+                d, F, etheta, elongan, eincl, period, sma, ecc, per0, long_an, incl, t0_perpass = calculate_euler(sim, j)
+
+                ds[j][i] = d
+                Fs[j][i] = F
+                ethetas[j][i] = etheta
+                elongans[j][i] = elongan
+                eincls[j][i] = eincl
+
+                periods[j][i] = period
+                smas[j][i] = sma
+                eccs[j][i] = ecc
+                per0s[j][i] = per0
+                long_ans[j][i] = long_an
+                incls[j][i] = incl
+                t0_perpasses[j][i] = t0_perpass
+
+            # if necessary, make adjustments to particle for LTTE and then
+            # store position/velocity of the particle
             if ltte:
                 # then we need to integrate to different times per object
                 particle = particle_ltte(sim, j, time)
@@ -276,23 +324,10 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
             vys[j][i] = particle.vy * au_to_solrad # solRad/d
             vzs[j][i] = particle.vz * au_to_solrad # solRad/d
 
-            if return_roche_euler:
-                # TODO: do we want the LTTE-adjusted particles?  Do we need
-                # to wait for all particles to be LTTE-adjusted first?  Or do
-                # we want to do this BEFORE adjusting for LTTE?
-
-                d, F, etheta, elongan, eincl = calculate_euler(sim, j)
-
-                ds[j][i] = d
-                Fs[j][i] = F
-                ethetas[j][i] = etheta
-                elongans[j][i] = elongan
-                eincls[j][i] = eincl
-
 
     if return_roche_euler:
         # d, solRad, solRad/d, rad, unitless (sma), unitless, rad, rad, rad
-        return times, xs, ys, zs, vxs, vys, vzs, ds, Fs, ethetas, elongans, eincls
+        return times, xs, ys, zs, vxs, vys, vzs, ds, Fs, ethetas, elongans, eincls, periods, smas, eccs, per0s, long_ans, incls, t0_perpasses
 
     else:
         # d, solRad, solRad/d, rad

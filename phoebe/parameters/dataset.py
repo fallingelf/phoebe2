@@ -373,6 +373,20 @@ def mesh_syn(syn=True, **kwargs):
                 syn_params += [FloatArrayParameter(qualifier='horizon_analytic_ys', time=t, value=kwargs.get('horizon_analytic_ys', []), default_unit=u.solRad, description='Analytic horizon (interpolated, y component)')]
                 syn_params += [FloatArrayParameter(qualifier='horizon_analytic_zs', time=t, value=kwargs.get('horizon_analytic_zs', []), default_unit=u.solRad, description='Analytic horizon (interpolated, z component)')]
 
+                # TODO: only create these for nbody/roche meshes
+                syn_params += [FloatParameter(qualifier='d', time=t, value=kwargs.get('d', 0.0), default_unit=u.dimensionless_unscaled, description='Instantaneous (unitless) separation used to create roche potential')]
+                syn_params += [FloatParameter(qualifier='syncpar', time=t, value=kwargs.get('syncpar', 0.0), default_unit=u.dimensionless_unscaled, description='Instantaneous syncpar used to create roche potential')]
+
+                syn_params += [FloatParameter(qualifier='period', time=t, value=kwargs.get('period', 0.0), default_unit=u.d, description='Instantaneous period used to create roche potential')]
+                syn_params += [FloatParameter(qualifier='sma', time=t, value=kwargs.get('sma', 0.0), default_unit=u.solRad, description='Instantaneous sma used to create roche potential')]
+                syn_params += [FloatParameter(qualifier='ecc', time=t, value=kwargs.get('ecc', 0.0), default_unit=u.dimensionless_unscaled, description='Instantaneous ecc used to create roche potential')]
+                syn_params += [FloatParameter(qualifier='per0', time=t, value=kwargs.get('per0', 0.0), default_unit=u.deg, description='Instantaneous per0 used to create roche potential')]
+                syn_params += [FloatParameter(qualifier='long_an', time=t, value=kwargs.get('long_an', 0.0), default_unit=u.deg, description='Instantaneous long_an used to create roche potential')]
+                syn_params += [FloatParameter(qualifier='incl', time=t, value=kwargs.get('incl', 0.0), default_unit=u.deg, description='Instantaneous incl used to create roche potential')]
+                syn_params += [FloatParameter(qualifier='t0_perpass', time=t, value=kwargs.get('t0_perpass', 0.0), default_unit=u.d, description='Instantaneous t0_perpass used to create roche potential')]
+
+
+
             syn_params += [FloatArrayParameter(qualifier='areas', time=t, value=kwargs.get('areas', []), default_unit=u.solRad**2, description='Area of triangles')]
             syn_params += [FloatArrayParameter(qualifier='tareas', time=t, value=kwargs.get('areas', []), default_unit=u.solRad**2, description='Area of WD triangles')]
             # syn_params += [FloatArrayParameter(qualifier='volumes', time=t, value=kwargs.get('volumes', []), default_unit=u.solRad**3, description='Volume of triangles')]
