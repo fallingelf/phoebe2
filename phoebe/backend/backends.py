@@ -805,7 +805,7 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
 
                     # print "***", periodi, smai, ecci, per0i, long_ani, incli, perpassi
                     this_syn['period'] = periodi[cind] * u.d
-                    this_syn['sma'] = smai[cind] * u.solRad
+                    this_syn['sma'] = smai[cind] * u.AU
                     this_syn['ecc'] = ecci[cind]
                     this_syn['per0'] = per0i[cind] * u.rad
                     this_syn['long_an'] = long_ani[cind] * u.rad
