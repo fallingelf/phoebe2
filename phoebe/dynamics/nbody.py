@@ -191,7 +191,7 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
         sma = orbit.a
         ecc = orbit.e
         per0 = orbit.omega
-        long_an = orbit.Omega
+        long_an = orbit.Omega - np.pi
         incl = orbit.inc
         t0_perpass = orbit.T
 
