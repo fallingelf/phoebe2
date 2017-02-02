@@ -4098,7 +4098,7 @@ class FloatParameter(Parameter):
 
         # make sure the value is within the limits
         if not self.within_limits(value):
-            raise ValueError("value of {} must be within limits of {}".format(self.qualifier, self.limits))
+            raise ValueError("value of {}={} must be within limits of {}".format(self.qualifier, value, self.limits))
 
         # make sure we can convert back to the default_unit
         try:
