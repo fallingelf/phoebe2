@@ -1021,6 +1021,10 @@ class Mesh(ScaledProtoMesh):
 
         mesh = cls(**scaledproto_mesh.items())
 
+        # TESTING - see if we can still keep a copy of the scaledprotomesh
+        # to access and export via the frontend
+        mesh.scaledprotomesh = scaledproto_mesh.copy()
+
         mesh._place_in_orbit(pos, vel, euler, rotation_vel)
 
         if hasattr(scaledproto_mesh, '_label_envelope'):

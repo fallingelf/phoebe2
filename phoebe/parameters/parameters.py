@@ -1945,7 +1945,7 @@ class ParameterSet(object):
 
             # TODO: here we want to call a different plotting function - note
             # that meshes don't need to iterate over components like everything
-            # else will Keep in mind that we still want this to be plotting-
+            # else will. Keep in mind that we still want this to be plotting-
             # backend dependent, so perhaps there will be a plotting.mpl_mesh
             # function which will handle the output from preparing the arrays
 
@@ -2030,13 +2030,14 @@ class ParameterSet(object):
 
             #vertices_xyz = np.concatenate([ps.get_value('vertices', component=c, time=t, unit=kwargs['xunit']) for c in ps.components for t in ps.times]).reshape((-1, 3, 3))[:, :, :]
 
+            vertices_qualifier = kwargs.get('vertices', 'vertices')
             if kwargs.get('loop_times', False) or len(ps.times) <= 1:
-                vertices_xyz = np.concatenate([ps.get_value('vertices',
+                vertices_xyz = np.concatenate([ps.get_value(vertices_qualifier,
                                                             component=c,
                                                             unit=kwargs['xunit'])
                                                for c in ps.components]).reshape((-1, 3, 3))[:, :, :]
             else:
-                vertices_xyz = np.concatenate([ps.get_value('vertices',
+                vertices_xyz = np.concatenate([ps.get_value(vertices_qualifier,
                                                             component=c,
                                                             time=t,
                                                             unit=kwargs['xunit'])

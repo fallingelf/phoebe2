@@ -765,6 +765,7 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
                 this_syn['vys'] = body.mesh.velocities.centers[:,1] * u.solRad/u.d
                 this_syn['vzs'] = body.mesh.velocities.centers[:,2] * u.solRad/u.d
                 this_syn['vertices'] = body.mesh.vertices_per_triangle
+                this_syn['vertices_unrotated'] = body.mesh.scaledprotomesh.vertices_per_triangle
                 this_syn['areas'] = body.mesh.areas # * u.solRad**2
                 # TODO remove this 'normals' vector now that we have nx,ny,nz?
                 this_syn['normals'] = body.mesh.tnormals
