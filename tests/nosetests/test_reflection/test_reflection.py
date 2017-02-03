@@ -131,4 +131,4 @@ if __name__ == '__main__':
 
     b = test_binary(plot=True)
 
-    b = test_contact(plot=True)
+    #b = test_contact(plot=True)
