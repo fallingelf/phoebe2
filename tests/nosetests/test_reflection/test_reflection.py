@@ -2,6 +2,7 @@
 """
 
 import phoebe
+import libphoebe
 from phoebe import u
 import numpy as np
 import matplotlib.pyplot as plt
@@ -46,7 +47,10 @@ def test_binary(plot=False):
     for alb in [0, 0.5, 1.0]:
         print "alb = {}".format(alb)
         b.set_value_all('irrad_frac_refl_bol', alb)
-
+        
+        # applying a hack to speed up redistribution-reflection calculation
+        libphoebe.mesh_radiosity_redistrib_problem_nbody_convex_setup(use_stored=True, reset=True)
+        
         print "running phoebe2 model..."
         b.run_compute(compute='phoebe2', ntriangles=1000, model='phoebe2model')
         print "running phoebe1 model..."
