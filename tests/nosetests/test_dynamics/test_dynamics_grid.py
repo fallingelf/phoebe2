@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 
 phoebe.devel_on()
 
+# Turning off constrain checks ...
+phoebe.interactive_off()
+
 def _keplerian_v_nbody(b, ltte, period, plot=False):
     """
     test a single bundle for the phoebe backend's kepler vs nbody dynamics methods
