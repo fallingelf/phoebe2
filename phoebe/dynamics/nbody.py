@@ -444,15 +444,30 @@ def dynamics_bs(times, masses, smas, eccs, incls, per0s, long_ans, mean_anoms,
     per0s = _ensure_tuple(per0s)
     long_ans = _ensure_tuple(long_ans)
     mean_anoms = _ensure_tuple(mean_anoms)
-
+    
+    #~ times = np.array(times)
+    #~ masses = np.array(masses)
+    #~ smas = np.array(smas)
+    #~ eccs = np.array(eccs)
+    #~ incls = np.array(incls)
+    #~ per0s = np.array(per0s)
+    #~ long_ans = np.array(long_ans)
+    #~ mean_anoms = np.array(mean_anoms)
+    
     # TODO: include vgamma!!!!
     # print "*** bs.do_dynamics", masses, smas, eccs, incls, per0s, long_ans, mean_anoms, t0
+    
+    #~ d = photodynam.do_dynamics_numpy(times, masses, smas, eccs, incls, per0s, long_ans, mean_anoms, t0, stepsize, orbiterror, ltte, return_roche_euler)
     d = photodynam.do_dynamics(times, masses, smas, eccs, incls, per0s, long_ans, mean_anoms, t0, stepsize, orbiterror, ltte, return_roche_euler)
+   
     # d is in the format: {'t': (...), 'x': ( (1,2,3), (1,2,3), ...), 'y': ..., 'z': ...}
-
+    
+    #~ print "X:", d["x"]
+    #~ print "K:", d["kepl_a"]
+    
     nobjects = len(masses)
     ntimes = len(times)
-
+        
     # TODO: need to return euler angles... if that even makes sense?? Or maybe we
     # need to make a new place in orbit??
 
@@ -465,23 +480,34 @@ def dynamics_bs(times, masses, smas, eccs, incls, per0s, long_ans, mean_anoms,
     vxs = [(-1*np.array([d['vx'][ti][oi] for ti in range(ntimes)])*au_to_solrad) for oi in range(nobjects)]
     vys = [(-1*np.array([d['vy'][ti][oi] for ti in range(ntimes)])*au_to_solrad) for oi in range(nobjects)]
     vzs = [(np.array([d['vz'][ti][oi] for ti in range(ntimes)])*au_to_solrad) for oi in range(nobjects)]
-
+    
+    #~ ts = d['t'][:]
+    #~ xs = [-1*d['x'][:,oi]*au_to_solrad for oi in range(nobjects)]
+    #~ ys = [-1*d['y'][:,oi]*au_to_solrad for oi in range(nobjects)]
+    #~ zs = [d['z'][:,oi]*au_to_solrad for oi in range(nobjects)]
+    #~ vxs = [-1*d['vx'][:,oi]*au_to_solrad for oi in range(nobjects)]
+    #~ vys = [-1*d['vy'][:,oi]*au_to_solrad for oi in range(nobjects)]
+    #~ vzs = [d['vz'][:,oi]*au_to_solrad for oi in range(nobjects)]
+  
     if return_roche_euler:
         # raise NotImplementedError("euler angles for BS not currently supported")
         # a (sma), e (ecc), in (incl), o (per0?), ln (long_an?), m (mean_anom?)
         ds = [(np.array([d['kepl_a'][ti][oi] for ti in range(ntimes)])*au_to_solrad) for oi in range(nobjects)]
+        #~ ds = [d['kepl_a'][:,oi]*au_to_solrad for oi in range(nobjects)]
+        
         # TODO: fix this
         Fs = [(np.array([1.0 for ti in range(ntimes)])*au_to_solrad) for oi in range(nobjects)]
+        
         # TODO: check to make sure this is the right angle
         # TODO: need to add np.pi for secondary component?
         # true anomaly + periastron
         ethetas = [(np.array([d['kepl_o'][ti][oi]+d['kepl_m'][ti][oi]+np.pi/2 for ti in range(ntimes)])*au_to_solrad) for oi in range(nobjects)]
+        
         # elongans = [(np.array([d['kepl_ln'][ti][oi]+long_ans[0 if oi==0 else oi-1] for ti in range(ntimes)])*au_to_solrad) for oi in range(nobjects)]
         elongans = [(np.array([d['kepl_ln'][ti][oi]+long_ans[0 if oi==0 else oi-1] for ti in range(ntimes)])*au_to_solrad) for oi in range(nobjects)]
+        
         # eincls = [(np.array([d['kepl_in'][ti][oi]+incls[0 if oi==0 else oi-1] for ti in range(ntimes)])*au_to_solrad) for oi in range(nobjects)]
         eincls = [(np.array([d['kepl_in'][ti][oi]+np.pi-incls[0 if oi==0 else oi-1] for ti in range(ntimes)])*au_to_solrad) for oi in range(nobjects)]
-
-
 
         # d, solRad, solRad/d, rad
         return ts, xs, ys, zs, vxs, vys, vzs, ds, Fs, ethetas, elongans, eincls
