@@ -24,11 +24,10 @@ def test_binary(plot=False):
     if plot:
         b.add_dataset('mesh', times=[0.0])
     b.add_compute('phoebe', compute='phoebe2', irrad_method='wilson')
-    b.add_compute('legacy', compute='phoebe1', mult_refl=True, refl_num=5)
+    b.add_compute('legacy', compute='phoebe1', refl_num=5)
 
     # set matching atmospheres
-    b.set_value_all('atm@phoebe2', 'extern_planckint')
-    b.set_value_all('atm@phoebe1', 'blackbody')
+    b.set_value_all('atm', 'extern_planckint')
 
     # set matching limb-darkening, both bolometric and passband
     b.set_value_all('ld_func_bol', 'logarithmic')
@@ -42,7 +41,7 @@ def test_binary(plot=False):
         b.set_value_all('irrad_frac_refl_bol', alb)
 
         print "running phoebe2 model..."
-        b.run_compute(compute='phoebe2', delta=0.1, model='phoebe2model')
+        b.run_compute(compute='phoebe2', ntriangles=1000, model='phoebe2model')
         print "running phoebe1 model..."
         b.run_compute(compute='phoebe1', gridsize=30, model='phoebe1model')
 
@@ -81,8 +80,7 @@ def test_contact(plot=False):
     b.add_compute('legacy', compute='phoebe1', refl_num=5, morphology = 'Overcontact binary not in thermal contact')
 
     # set matching atmospheres
-    b.set_value_all('atm@phoebe2', 'extern_planckint')
-    b.set_value_all('atm@phoebe1', 'blackbody')
+    b.set_value_all('atm', 'extern_planckint')
 
     # set matching limb-darkening, both bolometric and passband
     b.set_value_all('ld_func_bol', 'logarithmic')
@@ -96,7 +94,7 @@ def test_contact(plot=False):
         b.set_value_all('irrad_frac_refl_bol', alb)
 
         print "running phoebe2 model..."
-        b.run_compute(compute='phoebe2', delta=0.1, model='phoebe2model')
+        b.run_compute(compute='phoebe2', ntriangles=1000, model='phoebe2model')
         print "running phoebe1 model..."
         b.run_compute(compute='phoebe1', gridsize=30, model='phoebe1model')
 

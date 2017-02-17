@@ -35,7 +35,6 @@ def test_binary(plot=False):
     b.add_compute('legacy', refl_num=0, compute='phoebe1')
 
 
-
     # set matching limb-darkening for bolometric
     b.set_value_all('ld_func_bol', 'logarithmic')
     b.set_value_all('ld_coeffs_bol', [0.0, 0.0])
@@ -57,12 +56,12 @@ def test_binary(plot=False):
 
             if ld_func=='interp':
                 atm = 'ck2004'
-                atm_ph1 = 'kurucz'
+                atm_ph1 = 'extern_atmx'
                 exact_comparison = False
 
             else:
                 atm = 'extern_atmx'
-                atm_ph1 = 'kurucz'
+                atm_ph1 = 'extern_atmx'
                 exact_comparison = True
 
 
@@ -112,7 +111,7 @@ def test_binary(plot=False):
                 plt.legend()
                 plt.show()
 
-            assert(np.allclose(phoebe2_val, phoebe1_val, rtol=3e-3 if exact_comparison else 0.3, atol=0.))
+            assert(np.allclose(phoebe2_val, phoebe1_val, rtol=5e-3 if exact_comparison else 0.3, atol=0.))
 
 
     for atm in ['ck2004', 'blackbody']:
@@ -161,7 +160,7 @@ def test_binary(plot=False):
             if plot:
                 b.show()
 
-            assert(diff_med_fluxes < 0.025)
+            assert(diff_med_fluxes < 0.035)
 
 
 
