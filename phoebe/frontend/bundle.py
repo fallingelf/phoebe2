@@ -17,6 +17,7 @@ from phoebe.parameters import feature as _feature
 from phoebe.backend import backends
 from phoebe.distortions import roche
 from phoebe.frontend import io
+from phoebe.atmospheres.passbands import _pbtable
 import libphoebe
 
 from phoebe import u
@@ -1138,6 +1139,16 @@ class Bundle(ParameterSet):
                         return False,\
                             'misaligned orbits are not currently supported.'
 
+        # check to make sure passband supports the selected atm
+        for pbparam in self.filter(qualifier='passband').to_list():
+            pb = pbparam.get_value()
+            pbatms = _pbtable[pb]['atms']
+            # NOTE: atms are not attached to datasets, but per-compute and per-component
+            for atmparam in self.filter(qualifier='atm', kind='phoebe').to_list():
+                atm = atmparam.get_value()
+                if atm not in pbatms:
+                    return False, "'{}' passband ({}) does not support atm='{}' ({})".format(pb, pbparam.twig, atm, atmparam.twig)
+
         # check length of ld_coeffs vs ld_func and ld_func vs atm
         def ld_coeffs_len(ld_func, ld_coeffs):
             # current choices for ld_func are:
@@ -1749,15 +1760,15 @@ class Bundle(ParameterSet):
 
         # Now we need to apply any kwargs sent by the user.  There are a few
         # scenarios (and each kwargs could fall into different ones):
-        # time = [0,1,2]
+        # times = [0,1,2]
         #    in this case, we want to apply time across all of the components that
         #    are applicable for this dataset kind AND to _default so that any
         #    future components added to the system are copied appropriately
-        # time = [0,1,2], components=['primary', 'secondary']
+        # times = [0,1,2], components=['primary', 'secondary']
         #    in this case, we want to apply the value for time across components
         #    but time@_default should remain empty (it will not copy for components
         #    added in the future)
-        # time = {'primary': [0,1], 'secondary': [0,1,2]}
+        # times = {'primary': [0,1], 'secondary': [0,1,2]}
         #    here, regardless of the components, we want to apply these to their
         #    individually requested parameters.  We won't touch _default unless
         #    its included in the dictionary
@@ -1785,7 +1796,15 @@ class Bundle(ParameterSet):
                 elif user_provided_components:
                     components_ = components
                 else:
-                    components_ = components+['_default']
+                    # for dataset kinds that include passband dependent AND
+                    # independent parameters, we need to carefully default on
+                    # what component to use when passing the defaults
+                    if kind in ['rv'] and k in ['ld_func', 'ld_coeffs', 'passband', 'intens_weighting']:
+                        # passband-dependent (ie lc_dep) parameters do not have
+                        # assigned components
+                        components_ = None
+                    else:
+                        components_ = components+['_default']
 
                 self.set_value_all(qualifier=k,
                                    dataset=kwargs['dataset'],
@@ -1849,13 +1868,7 @@ class Bundle(ParameterSet):
         if dataset is None and not len(kwargs.items()):
             raise ValueError("must provide some value to filter for datasets")
 
-        kwargs['dataset'] = dataset
-        # Let's avoid the possibility of deleting a single parameter
-        kwargs['qualifier'] = None
-        # Let's also avoid the possibility of accidentally deleting system
-        # parameters, etc
-        kwargs.setdefault('context', ['dataset', 'model', 'constraint', 'compute'])
-        # and lastly, let's handle deps if kind was passed
+        # let's handle deps if kind was passed
         kind = kwargs.get('kind', None)
 
         if kind is not None:
@@ -1868,6 +1881,25 @@ class Bundle(ParameterSet):
                     kind_deps.append(dep)
             kind = kind + kind_deps
         kwargs['kind'] = kind
+
+
+        if dataset is None:
+            # then let's find the list of datasets that match the filter,
+            # we'll then use dataset to do the removing.  This avoids leaving
+            # pararameters behind that don't specifically match the filter
+            # (ie if kind is passed as 'rv' we still want to remove parameters
+            # with datasets that are RVs but belong to a different kind in
+            # another context like compute)
+            dataset = self.filter(**kwargs).datasets
+            kwargs['kind'] = None
+
+
+        kwargs['dataset'] = dataset
+        # Let's avoid the possibility of deleting a single parameter
+        kwargs['qualifier'] = None
+        # Let's also avoid the possibility of accidentally deleting system
+        # parameters, etc
+        kwargs.setdefault('context', ['dataset', 'model', 'constraint', 'compute'])
 
         # ps = self.filter(**kwargs)
         # logger.info('removing {} parameters (this is not undoable)'.\
@@ -2559,7 +2591,7 @@ class Bundle(ParameterSet):
                             if self.get_value(qualifier='fti_method', dataset=dataset, compute=compute, context='compute', **kwargs)=='oversample':
                                 times_ds = self.get_value(qualifier='times', dataset=dataset, context='dataset')
                                 # exptime = self.get_value(qualifier='exptime', dataset=dataset, context='dataset', unit=u.d)
-                                fti_oversample = self.get_value(qualifier='fti_oversample', dataset=dataset, compute=compute, context='compute', **kwargs)
+                                fti_oversample = self.get_value(qualifier='fti_oversample', dataset=dataset, compute=compute, context='compute', check_visible=False, **kwargs)
                                 # NOTE: this is hardcoded for LCs which is the
                                 # only dataset that currently supports oversampling,
                                 # but this will need to be generalized if/when

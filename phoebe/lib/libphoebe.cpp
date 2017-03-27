@@ -4050,7 +4050,7 @@ static PyObject *mesh_radiosity_problem_nbody_convex(
   // Check is there is interpolation is used
   //
   
-  bool st_interp = false;
+  int n = LDmod.size();   
   
   for (auto && pld : LDmod) if (pld == 0) {
     st_interp = true;

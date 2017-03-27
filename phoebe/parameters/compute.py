@@ -65,6 +65,7 @@ def phoebe(**kwargs):
 
     if conf.devel:
         # TODO: can we have this computed from ntriangles? - and then do the same for the legacy compute options?
+        # NOTE: if removing from developer mode - also need to remove if conf.devel in io.py line ~800
         params += [IntParameter(visible_if='mesh_method:wd', copy_for={'kind': ['star', 'envelope'], 'component': '*'}, component='_default', qualifier='gridsize', value=kwargs.get('gridsize', 60), limits=(10,None), default_unit=u.dimensionless_unscaled, description='Number of meshpoints for WD method')]
     # ------------------------------------------------------
 
@@ -96,8 +97,8 @@ def phoebe(**kwargs):
     # means that this should exist for each component/dataset pair with the
     # rv_dep kind
     params += [ChoiceParameter(qualifier='lc_method', copy_for = {'kind': ['lc'], 'dataset': '*'}, dataset='_default', value=kwargs.get('lc_method', 'numerical'), choices=['numerical', 'analytical'] if conf.devel else ['numerical'], description='Method to use for computing LC fluxes')]
-    params += [ChoiceParameter(qualifier='fti_method', copy_for = {'kind': ['lc'], 'dataset': '*'}, dataset='_default', value=kwargs.get('fti_method', 'None'), choices=['None', 'oversample'], description='How to handle finite-time integration (when non-zero exptime)')]
-    params += [IntParameter(visible_if='fti_method:oversample', qualifier='fti_oversample', copy_for={'kind': ['lc'], 'dataset': '*'}, component='_default', dataset='_default', value=kwargs.get('fti_oversample', 5), default_unit=u.dimensionless_unscaled, description='Number of times to sample per-datapoint for finite-time integration')]
+    params += [ChoiceParameter(qualifier='fti_method', copy_for = {'kind': ['lc'], 'dataset': '*'}, dataset='_default', value=kwargs.get('fti_method', 'none'), choices=['none', 'oversample'], description='How to handle finite-time integration (when non-zero exptime)')]
+    params += [IntParameter(visible_if='fti_method:oversample', qualifier='fti_oversample', copy_for={'kind': ['lc'], 'dataset': '*'}, dataset='_default', value=kwargs.get('fti_oversample', 5), default_unit=u.dimensionless_unscaled, description='Number of times to sample per-datapoint for finite-time integration')]
     params += [ChoiceParameter(qualifier='rv_method', copy_for = {'kind': ['rv'], 'component': '*', 'dataset': '*'}, component='_default', dataset='_default', value=kwargs.get('rv_method', 'flux-weighted'), choices=['flux-weighted', 'dynamical'], description='Method to use for computing RVs (must be flux-weighted for Rossiter-McLaughlin)')]
     params += [BoolParameter(visible_if='rv_method:flux-weighted', qualifier='rv_grav', copy_for = {'kind': ['rv'], 'component': '*', 'dataset': '*'}, component='_default', dataset='_default', value=kwargs.get('rv_grav', False), description='Whether gravitational redshift effects are enabled for RVs')]
 

@@ -21,9 +21,18 @@ if os.getcwd().find(os.path.abspath(os.path.split(os.path.split(__file__)[0])[0]
 # unless 'Agg' is used before the import. All X-systems define the
 # 'DISPLAY' environment variable, and all non-X-systems do not. We do make a
 # distinction between windows and unix based system. Hence:
-import matplotlib
-if 'DISPLAY' not in os.environ.keys() and sys.platform not in ['win32','cygwin']:
-    matplotlib.use('Agg')
+try:
+    import matplotlib
+except ImportError:
+    pass
+    # we'll catch this later in plotting and throw warnings as necessary
+else:
+    if 'DISPLAY' not in os.environ.keys() and sys.platform not in ['win32','cygwin']:
+        matplotlib.use('Agg')
+    elif hasattr(sys, 'real_prefix'):
+        # then we're likely in a virtualenv.  Our best bet is to use the 'TkAgg'
+        # backend, but this will require python-tk to be installed on the system
+        matplotlib.use('TkAgg')
 
 import logging
 _logger = logging.getLogger("PHOEBE")
@@ -42,10 +51,8 @@ class Settings(object):
         # self._interactive = not hasattr(__main__, '__file__') or bool(sys.flags.interactive)
         self._interactive = True
 
-        # Check to see whether developer/testing mode is enabled.
-        self._devel = os.path.isfile(os.path.expanduser('~/.phoebe_devel_enabled'))
-        if self._devel:
-            print("WARNING: developer mode enabled, to disable 'rm ~/.phoebe_devel_enabled' and restart phoebe")
+        # And we'll require explicitly setting developer mode on
+        self._devel = False
 
     def interactive_on(self):
         self._interactive = True
@@ -78,7 +85,7 @@ conf = Settings()
 
 
 # make packages available at top-level
-from .atmospheres.passbands import install_passband, download_passband, list_online_passbands, list_installed_passbands, list_passbands, get_passband
+from .atmospheres.passbands import install_passband, download_passband, list_online_passbands, list_installed_passbands, list_passbands, list_passband_directories, get_passband
 from .constants import *
 from .parameters import *
 from .parameters import hierarchy, component, compute, constraint, dataset
