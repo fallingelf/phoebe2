@@ -88,7 +88,9 @@ before_install:
       clang++ --version;
       brew update;
       brew install llvm --with-clang --with-clang-extra-tools;
-      brew install gcc gnu-sed gtk+ libglade libgnomecanvas sdl libusb libusb-compat gsl opam wget dfu-util;
+      #brew unlink wget;
+      #brew install wget;
+      brew install gcc gnu-sed gtk+ libglade libgnomecanvas sdl libusb libusb-compat gsl opam dfu-util;
       fi;
 
 install:
