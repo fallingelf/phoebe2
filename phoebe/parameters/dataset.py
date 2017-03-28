@@ -131,8 +131,6 @@ def etv(**kwargs):
     :return: a :class:`phoebe.parameters.parameters.ParameterSet` of all newly
         created :class:`phoebe.parameters.parameters.Parameter`s
     """
-    if not conf.devel:
-        raise NotImplementedError("'etv' dataset not officially supported for this release.  Enable developer mode to test.")
 
     obs_params = []
 
