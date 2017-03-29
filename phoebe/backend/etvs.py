@@ -2,7 +2,7 @@ import logging
 import numpy as np
 from phoebe import dynamics
 
-from scipy.optimize import newton
+from scipy.optimize import minimize
 
 logger = logging.getLogger("ETVS")
 
@@ -12,7 +12,7 @@ def barycentric():
     raise NotImplementedError
 
 
-def crossing(b, component, time, dynamics_method='keplerian', ltte=True, tol=1e-4, maxiter=1000):
+def crossing(b, component, time, dynamics_method='keplerian', ltte=True, tol=1e-4):
     """
     tol in days
     """
@@ -31,7 +31,7 @@ def crossing(b, component, time, dynamics_method='keplerian', ltte=True, tol=1e-
             ts, xs, ys, zs, vxs, vys, vzs = dynamics.nbody.dynamics_from_bundle(b, times, compute=None, ltte=ltte)
 
         elif dynamics_method=='bs':
-            ts, xs, ys, zs, vxs, vys, vzs = dynamics.nbody.dynamics_from_bundle_bs(b, times, compute, ltte=ltte)
+            ts, xs, ys, zs, vxs, vys, vzs = dynamics.nbody.dynamics_from_bundle_bs(b, times, compute=None, ltte=ltte)
 
         elif dynamics_method=='keplerian':
             # TODO: make sure that this takes systemic velocity and corrects positions and velocities (including ltte effects if enabled)
@@ -49,5 +49,13 @@ def crossing(b, component, time, dynamics_method='keplerian', ltte=True, tol=1e-
     cind1 = starrefs.index(component)
     cind2 = starrefs.index(b.hierarchy.get_sibling_of(component))
 
-    # TODO: provide options for tol and maxiter (in the frontend computeoptionsp)?
-    return newton(projected_separation_sq, x0=time, args=(b, dynamics_method, cind1, cind2, ltte), tol=tol, maxiter=maxiter)
+    orb_period = b.get_value('period', component=b.hierarchy.get_parent_of(component), context='component')
+
+    res = minimize(projected_separation_sq, x0=[time], args=(b, dynamics_method, cind1, cind2, ltte), tol=tol, bounds=((time-orb_period, time+orb_period),))
+
+    if not res.success:
+        logger.warning("Failed to find eclipse time near {} with msg {}".format(time, res.message))
+        return time
+
+    return res.x[0]
+
