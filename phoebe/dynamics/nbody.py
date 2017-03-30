@@ -8,6 +8,8 @@ from scipy.optimize import newton
 from phoebe import u, c
 from phoebe.dynamics import keplerian
 
+from distutils.version import LooseVersion
+
 try:
     import photodynam
 except ImportError:
@@ -20,14 +22,17 @@ try:
 except ImportError:
     _can_rebound = False
 else:
-    _can_rebound = True
+    _can_rebound = LooseVersion(rebound.__version__) >= LooseVersion('3.3.2')
 
-try:
-    import reboundx
-except ImportError:
-    _can_reboundx = False
+if _can_rebound:
+    try:
+        import reboundx
+    except ImportError:
+        _can_reboundx = False
+    else:
+        _can_reboundx = True
 else:
-    _can_reboundx = True
+    _can_reboundx = False
 
 import logging
 logger = logging.getLogger("DYNAMICS.NBODY")
@@ -106,7 +111,7 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
     t0 = b.get_value('t0', context='system', unit=u.d)
 
     if not _can_rebound:
-        raise ImportError("rebound is not installed")
+        raise ImportError("rebound 3.3.2+ is not installed")
 
     if gr and not _can_reboundx:
         raise ImportError("reboundx is not installed (required for gr effects)")
@@ -151,9 +156,7 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
         return rebound.Particle(m=m, x=x, y=y, z=z, vx=vx, vy=vy, vz=vz)
 
     def calculate_euler(sim, j):
-        # NOTE: THIS WILL FAIL FOR j==0 EXCEPT FOR MY LOCAL MODIFICATION
-        # TO REBOUND. SO WE EITHER NEED TO WORK AROUND THIS OR SUBMIT
-        # A PR TO REBOUND AND SET A VERSION DEPENDENCY ONCE ITS ACCEPTED
+        # NOTE: THIS WILL FAIL FOR j==0 FOR REBOUND < 3.3.2
         particle = sim.particles[j]
 
         sibling_particles = [sim.particles[k] for k in sibling_Ns[j]]
