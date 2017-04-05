@@ -445,9 +445,10 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
     distance = b.get_value(qualifier='distance', context='system', unit=u.m)
     t0 = b.get_value(qualifier='t0', context='system', unit=u.d)
 
-    distortion_method = computeparams.get_value('distortion_method', component=starrefs[0], **kwargs)
-    if len(starrefs)==1 and distortion_method in ['roche']:
-        raise ValueError("distortion_method='{}' not valid for single star".format(distortion_method))
+    if len(starrefs)==1:
+        distortion_method_single = computeparams.get_value('distortion_method', component=starrefs[0], **kwargs)
+        if distortion_method_single in ['roche']:
+            raise ValueError("distortion_method='{}' not valid for single star".format(distortion_method_single))
 
     if len(meshablerefs) > 1 or hier.get_kind_of(meshablerefs[0])=='envelope':
         if dynamics_method in ['nbody', 'rebound']:
@@ -799,7 +800,7 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
                     this_syn['horizon_ys'] = horizons[cind][:,1]
                     this_syn['horizon_zs'] = horizons[cind][:,2]
 
-                if dynamics_method in ['nbody', 'rebound'] and distortion_method == 'roche':
+                if dynamics_method in ['nbody', 'rebound'] and body.distortion_method == 'roche':
                     this_syn['d'] = di[cind]
                     this_syn['syncpar'] = Fi[cind]
 
