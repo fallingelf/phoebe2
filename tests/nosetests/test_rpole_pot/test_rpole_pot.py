@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 
 phoebe.devel_on()
 
+# Turning off constrain checks ...
+phoebe.interactive_off()
+
 def test_binary(plot=False):
     b = phoebe.Bundle.default_binary()
 
