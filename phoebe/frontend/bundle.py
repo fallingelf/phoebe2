@@ -281,7 +281,7 @@ class Bundle(ParameterSet):
 
     @classmethod
     def default_binary(cls, starA='primary', starB='secondary', orbit='binary',
-                       contact_binary=False):
+                       contact_envelope=False):
         """Load a bundle with a default binary as the system.
 
         primary - secondary
@@ -290,19 +290,25 @@ class Bundle(ParameterSet):
 
         >>> b = Bundle.default_binary()
 
+        :parameter str contact_envelope: if the binary should be a contact_envelope
+            binary, then provide its label here.
         :return: instantiated :class:`Bundle` object
         """
         b = cls()
         b.add_star(component=starA)
         b.add_star(component=starB)
         b.add_orbit(component=orbit)
-        if contact_binary:
-            b.add_component('envelope', component='contact_envelope')
+        if contact_envelope:
+            if not isinstance(contact_envelope, str):
+                # ie if passed as True
+                contact_envelope='contact_envelope'
+
+            b.add_component('envelope', component=contact_envelope)
             b.set_hierarchy(_hierarchy.binaryorbit,
                             b[orbit],
                             b[starA],
                             b[starB],
-                            b['contact_envelope'])
+                            b[contact_envelope])
         else:
             b.set_hierarchy(_hierarchy.binaryorbit,
                             b[orbit],
@@ -315,28 +321,28 @@ class Bundle(ParameterSet):
 
 
     @classmethod
-    def default_triple(cls, inner_as_primary=True, inner_as_overcontact=False,
+    def default_triple(cls, hierarchy='21',
                        starA='starA', starB='starB', starC='starC',
                        inner='inner', outer='outer',
-                       contact_envelope='contact_envelope'):
+                       contact_envelope=False):
         """Load a bundle with a default triple system.
 
-        Set inner_as_primary based on what hierarchical configuration you want.
+        Set hierarchy based on what configuration you want.
 
-        inner_as_primary = True:
+        hierarchy == '21' (default):
 
         starA - starB -- starC
 
-        inner_as_primary = False:
+        hierarchy == '12':
 
-        starC -- starA - starB
+        starA -- starB - starC
 
         This is a constructor, so should be called as:
 
         >>> b = Bundle.default_triple()
 
-        :parameter bool inner_as_primary: whether the inner-binary should be
-            the primary component of the outer-orbit
+        :parameter str contact_envelope: if the inner-binary should be a contact_envelope
+            binary, then provide its label here.
         :return: instantiated :class:`Bundle` object
         """
         b = cls()
@@ -346,20 +352,43 @@ class Bundle(ParameterSet):
         b.add_orbit(component=inner, period=1)
         b.add_orbit(component=outer, period=10)
 
-        if inner_as_overcontact:
-            b.add_envelope(component=contact_envelope)
-            inner_hier = _hierarchy.binaryorbit(b[inner],
-                                           b[starA],
-                                           b[starB],
-                                           b[contact_envelope])
-        else:
-            inner_hier = _hierarchy.binaryorbit(b[inner], b[starA], b[starB])
 
-        if inner_as_primary:
-            hierstring = _hierarchy.binaryorbit(b[outer], inner_hier, b[starC])
+        if hierarchy == '21':
+            if contact_envelope:
+                if not isinstance(contact_envelope, str):
+                    # ie. if passed as True
+                    contact_envelope='contact_envelope'
+                b.add_envelope(component=contact_envelope)
+                h1 = _hierarchy.binaryorbit(b[inner],
+                                            b[starA],
+                                            b[starB],
+                                            b[contact_envelope])
+            else:
+                h1 = _hierarchy.binaryorbit(b[inner],
+                                            b[starA],
+                                            b[starB])
+            hier = _hierarchy.binaryorbit(b[outer], h1, b[starC])
+
+        elif hierarchy == '12':
+            if contact_envelope:
+                if not isinstance(contact_envelope, str):
+                    # ie. if passed as True
+                    contact_envelope='contact_envelope'
+                b.add_envelope(component=contact_envelope)
+                h1 = _hierarchy.binaryorbit(b[inner],
+                                            b[starB],
+                                            b[starC],
+                                            b[contact_envelope])
+            else:
+                h1 = _hierarchy.binaryorbit(b[inner],
+                                            b[starB],
+                                            b[starC])
+            hier = _hierarchy.binaryorbit(b[outer], b[starA], h1)
+
         else:
-            hierstring = _hierarchy.binaryorbit(b[outer], b[starC], inner_hier)
-        b.set_hierarchy(hierstring)
+            raise ValueError("hierarchy of {} not supported".format(hierarchy))
+
+        b.set_hierarchy(hier)
 
         b.add_constraint(constraint.keplers_third_law_hierarchical,
                          outer, inner)
@@ -367,32 +396,30 @@ class Bundle(ParameterSet):
         # TODO: does this constraint need to be rebuilt when things change?
         # (ie in set_hierarchy)
 
-        b.add_compute()
-
+        b.add_compute(dynamics_method='nbody')
         return b
 
     @classmethod
-    def default_quadruple(cls, primary_as_overcontact=False,
-                          secondary_as_overcontact=False,
-                          starA='starA', starB='starB',
-                          starC='starC', starD='starD',
-                          orbitAB='orbitAB', orbitCD='orbitCD',
-                          orbitABCD='orbitABCD',
-                          envelopeAB='envelopeAB', envelopeCD='envelopeCD'):
-        """Load a bundle with a default quadruple system.
+    def default_doubledouble(cls, starA='starA', starB='starB',
+                             starC='starC', starD='starD',
+                             orbitAB='orbitAB', orbitCD='orbitCD', outer='outer',
+                             contact_envelopeAB=None, contact_envelopeCD=None):
+        """Load a bundle with a default double-double system.
 
         starA - starB -- starC - starD
 
+        There are no hierarchy options for a double-double system.
+
         This is a constructor, so should be called as:
 
-        >>> b = Bundle.default_quadruple()
+        >>> b = Bundle.default_doubledouble()
 
+        :parameter str contact_envelopeAB: if the AB-binary should be a contact_envelope
+            binary, then provide its label here.
+        :parameter str contact_envelopeCD: if the CD-binary should be a contact_envelopeCD
+            binary, then provide its label here.
         :return: instantiated :class:`Bundle` object
         """
-
-        if not conf.devel:
-            raise NotImplementedError("'default_quadruple' not officially supported for this release.  Enable developer mode to test.")
-
         b = cls()
         b.add_star(component=starA)
         b.add_star(component=starB)
@@ -400,28 +427,142 @@ class Bundle(ParameterSet):
         b.add_star(component=starD)
         b.add_orbit(component=orbitAB, period=1)
         b.add_orbit(component=orbitCD, period=1)
-        b.add_orbit(component=orbitABCD, period=100)
+        b.add_orbit(component=outer, period=10)
 
-        if primary_as_overcontact:
-            b.add_envelope(component=envelopeAB)
-            AB_hier = _hierarchy.binaryorbit(b[orbitAB], b[starA], b[starB], b[envelopeAB])
+        if contact_envelopeAB:
+            if not isinstance(contact_envelopeAB, str):
+                # ie. if its True
+                contact_envelopeAB = 'contact_envelopeAB'
+            b.add_envelope(component=contact_envelopeAB)
+            h1 = _hierarchy.binaryorbit(b[orbitAB], b[starA], b[starB], b[contact_envelopeAB])
         else:
-            AB_hier = _hierarchy.binaryorbit(b[orbitAB], b[starA], b[starB])
+            h1 = _hierarchy.binaryorbit(b[orbitAB], b[starA], b[starB])
 
-        if secondary_as_overcontact:
-            b.add_envelope(component=envelopeCD)
-            CD_hier = _hierarchy.binaryorbit(b[orbitCD], b[starC], b[starD], b[envelopeCD])
+        if contact_envelopeCD is not None:
+            if not isinstance(contact_envelopeCD, str):
+                # ie. if its True
+                contact_envelopeCD = 'contact_envelopeCD'
+            b.add_envelope(component=contact_envelopeCD)
+            h2 = _hierarchy.binaryorbit(b[orbitCD], b[starC], b[starD], b[contact_envelopeCD])
         else:
-            CD_hier = _hierarchy.binaryorbit(b[orbitCD], b[starC], b[starD])
+            h2 = _hierarchy.binaryorbit(b[orbitCD], b[starC], b[starD])
 
-        ABCD_hier = _hierarchy.binaryorbit(b[orbitABCD], AB_hier, CD_hier)
-        print "*** ABCD_hier:", ABCD_hier
-        b.set_hierarchy(ABCD_hier)
+        hier = _hierarchy.binaryorbit(b[outer], h1, h2)
 
-        # TODO: not sure if these two constraints will play nicely with each other
-        # b.add_constraint(constraint.keplers_third_law_hierarchical, orbitABCD, orbitAB)
-        # b.add_constraint(constraint.keplers_third_law_hierarchical, orbitABCD, orbitCD)
+        b.set_hierarchy(hier)
 
+        # TODO: set hierarchical constraints
+        raise NotImplementedError('double-double hierarchical constraints not yet implemented')
+
+        b.add_compute(dynamics_method='nbody')
+        return b
+
+    @classmethod
+    def default_quadruple(cls, hierarchy='211',
+                          starA='starA', starB='starB',
+                          starC='starC', starD='starD',
+                          inner='inner', middle='middle', outer='outer',
+                          contact_envelope=None):
+        """Load a bundle with a default quadruple system.
+
+        Set hierarchy based on what configuration you want.
+
+        hierarchy == '211' (default):
+
+        starA - starB -- starC --- starD
+
+        hierarchy == '112':
+
+        starA --- starB -- starC - starD
+
+        hierarchy == '121' or '121a':
+
+        starA -- starB - starC --- starD
+
+        hierarchy == '121b':
+
+        starA --- starB - starC -- starD
+
+        For a configuration of starA - starB -- starC - starD, use :meth:`default_doubledouble` instead.
+
+        This is a constructor, so should be called as:
+
+        >>> b = Bundle.default_quadruple()
+
+        :parameter str contact_envelope: if the inner-binary should be a contact_envelope
+            binary, then provide its label here.
+        :return: instantiated :class:`Bundle` object
+        """
+        b = cls()
+        b.add_star(component=starA)
+        b.add_star(component=starB)
+        b.add_star(component=starC)
+        b.add_star(component=starD)
+        b.add_orbit(component=inner, period=1)
+        b.add_orbit(component=middle, period=1)
+        b.add_orbit(component=outer, period=10)
+
+        if contact_envelope:
+            if not isinstance(contact_envelope, str):
+                # ie. if its True
+                contact_envelope = 'contact_envelope'
+            b.add_envelope(component=contact_envelope)
+
+        if hierarchy == '211':
+            if contact_envelope is not None:
+                h1 = _hierarchy.binaryorbit(b[inner],
+                                               b[starA],
+                                               b[starB],
+                                               b[contact_envelope])
+            else:
+               h1 = _hierarchy.binaryorbit(b[inner], b[starA], b[starB])
+            h2 = _hierarchy.binaryorbit(b[middle], h1, b[starC])
+            hier = _hierarchy.binaryorbit(b[outer], h2, b[starD])
+        elif hierarchy == '112':
+            if contact_envelope is not None:
+                h1 = _hierarchy.binaryorbit(b[inner],
+                                            b[starC],
+                                            b[starD],
+                                            b[contact_envelope])
+            else:
+                h1 = _hierarchy.binaryorbit(b[inner], b[starC], b[starD])
+            h2 = _hierarchy.binaryorbit(b[middle], b[starB], h1)
+            hier = _hierarchy.binaryorbit(b[outer], b[starA], h2)
+        elif hierarchy in ['121', '121a']:
+            if contact_envelope is not None:
+                h1 = _hierarchy.binaryorbit(b[inner],
+                                            b[starB],
+                                            b[starC],
+                                            b[contact_envelope])
+            else:
+                h1 = _hierarchy.binaryorbit(b[inner], b[starB], b[starC])
+            h2 = _hierarchy.binaryorbit(b[middle], b[starA], h1)
+            hier = _hierarchy.binaryorbit(b[outer], h2, b[starD])
+        elif hierarchy == '121b':
+            if contact_envelope is not None:
+                h1 = _hierarchy.binaryorbit(b[inner],
+                                            b[starB],
+                                            b[starC],
+                                            b[contact_envelope])
+            else:
+                h1 = _hierarchy.binaryorbit(b[inner], b[starB], b[starC])
+            h2 = _hierarchy.binaryorbit(b[middle], h1, b[starD])
+            hier = _hierarchy.binaryorbit(b[outer], b[starA], h2)
+        elif hierarchy == '22':
+            raise ValueError("for hierarchy==22 use default_doubledouble instead")
+        else:
+            raise ValueError("hierarchy of {} not supported".format(hierarchy))
+
+        b.set_hierarchy(hier)
+
+        # TODO: set hierarchical constraints
+        b.add_constraint(constraint.keplers_third_law_hierarchical,
+                         middle, inner)
+
+        b.add_constraint(constraint.keplers_third_law_hierarchical,
+                         outer, middle)
+
+        b.add_compute(dynamics_method='nbody')
         return b
 
     def save(self, filename, clear_history=True, incl_uniqueid=False):

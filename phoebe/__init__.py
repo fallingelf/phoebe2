@@ -124,6 +124,9 @@ def default_binary(*args, **kwargs):
 def default_triple(*args, **kwargs):
     return Bundle.default_triple(*args, **kwargs)
 
+def default_doubledouble(*args, **kwargs):
+    return Bundle.default_doubledouble(*args, **kwargs)
+
 def default_quadruple(*args, **kwargs):
     return Bundle.default_quadruple(*args, **kwargs)
 
@@ -144,6 +147,3 @@ def devel_on():
 
 def devel_off():
     conf.devel_off()
-
-
-

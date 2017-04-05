@@ -4574,6 +4574,9 @@ class HierarchyParameter(StringParameter):
 
         trace = self._recurse_find_trace(structure, our_item)
 
+        if trace is None:
+            raise ValueError("could not find hierarchy trace of {} in structure {}".format(our_item, structure))
+
         return structure, trace, our_item
 
     def change_component(self, old_component, new_component):
@@ -4635,7 +4638,6 @@ class HierarchyParameter(StringParameter):
         structure, trace, item = self._get_structure_and_trace(component)
         # trace points us to our_item at self._get_by_trace(structure, trace)
         # so to get the parent, if our trace is [1,1,0] we want to use [1, 0] which is trace[:-2]+[trace[-2]-1]
-
 
         #~ print "***", trace
         if len(trace)<=1:
