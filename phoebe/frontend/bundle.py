@@ -1003,6 +1003,11 @@ class Bundle(ParameterSet):
         # need to run any constraints since some may be deleted and rebuilt
         changed_params = self.run_delayed_constraints()
 
+        # temporarily disable interactive mode so we don't run checks and
+        # constraints until everything is in place
+        interactive_orig = conf.interactive
+        conf._interactive = False
+
 
         _old_param = self.get_hierarchy()
 
@@ -1156,6 +1161,14 @@ class Bundle(ParameterSet):
                           redo_kwargs=redo_kwargs,
                           undo_func='set_hierarchy',
                           undo_kwargs=undo_kwargs)
+
+        # re-set interactive mode to whatever it was before
+        conf._interactive = interactive_orig
+        if conf.interactive:
+            # we may have missed a few constraints while setting the hierarchy
+            # and so since we temporarily disabled interactive mode, we should
+            # run those delayed constraints now if interactive mode is enabled
+            self.run_delayed_constraints()
 
         return
 

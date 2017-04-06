@@ -4660,9 +4660,10 @@ class HierarchyParameter(StringParameter):
         # trace points us to our_item at self._get_by_trace(structure, trace)
         # so to get the parent, if our trace is [1,1,0] we want to use [1, 0] which is trace[:-2]+[trace[-2]-1]
 
-        #~ print "***", trace
+        # print "*** get_parent_of", component, trace
         if len(trace)<=1:
-            return None
+            return self.get_top()
+            # return None
 
         return str(self._get_by_trace(structure, trace[:-2]+[trace[-2]-1]).split(':')[-1])
 
