@@ -378,19 +378,22 @@ class System(object):
         # To do that, we'll take the conservative max_r for each object
         # and their current positions, and see if the separations are larger
         # than sum of max_rs
-        possible_eclipse = False
+        comp_eclipse = []
+        # possible_eclipse = False
         if len(self.bodies) == 1:
             # TODO: need to handle overcontacts in triples better (the envelope
             # will always need to be sent to eclipsing, but the additional
             # star will only need to be sent if possibly eclipsing)
             if self.bodies[0].__class__.__name__ == 'Envelope':
-                possible_eclipse = True
+                # possible_eclipse = True
+                comp_eclipse = self._bodies.keys()
             else:
-                possible_eclipse = False
+                # then leave comp_eclipse empty
+                pass
+                # possible_eclipse = False
         else:
             max_rs = [body.max_r for body in self.bodies]
             comps = self._bodies.keys()
-            comp_eclipse = []
             for i in range(0, len(self.xs)-1):
                 for j in range(i+1, len(self.xs)):
                     proj_sep_sq = sum([(c[i]-c[j])**2 for c in (self.xs,self.ys)])
@@ -404,11 +407,13 @@ class System(object):
                             comp_eclipse.append(comps[j])
 
 
-        # TODO: fix this - eclipsing doesn't work on only a subset of objects
-        # likely because of the way that the columns are unpacked/packed
-        # and/or the fact that self.xs,ys,zs assumes all meshes to be present
-        if len(comp_eclipse):
-            comp_eclipse = self._bodies.keys()
+            # TODO: fix this - eclipsing doesn't work on only a subset of objects
+            # likely because of the way that the columns are unpacked/packed
+            # and/or the fact that self.xs,ys,zs assumes all meshes to be present.
+            # For now, we'll do eclipsing on all objects if there are any possible
+            # eclipses at all.  This will work fine, but adds unnecessary overhead.
+            if len(comp_eclipse):
+                comp_eclipse = self._bodies.keys()
 
         # meshes are objects which allow us to easily access and update columns
         # in the meshes *in memory*.  That is meshes.update_columns will propogate
