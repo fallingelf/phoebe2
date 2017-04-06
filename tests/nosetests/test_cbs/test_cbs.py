@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 def test_binary(plot=False):
 
-    cb = phoebe.Bundle.default_binary(contact_binary=True)
+    cb = phoebe.Bundle.default_binary(contact_envelope='contact_envelope')
     cb['pot@contact_envelope'] = 3.5
     cb['q'] = 1.0
     cb['teff@primary'] = 5000.

@@ -65,7 +65,7 @@ def test_binary(plot=False):
 
 def test_contact(plot=False):
 
-    b = phoebe.default_binary(contact_binary=True)
+    b = phoebe.default_binary(contact_envelope='contact_envelope')
 
     b.set_value('incl', component='binary', value=45.0)
     b['pot@contact_envelope'] = 3.5
