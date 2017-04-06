@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 phoebe.devel_on()
+phoebe.interactive_off()
 
 def _keplerian_v_nbody(b, plot=False):
     """
@@ -15,23 +16,22 @@ def _keplerian_v_nbody(b, plot=False):
 
     # TODO: loop over ltte=True,False (once keplerian dynamics supports the switch)
 
-    # b.add_compute(dynamics_method='bs')
-    b.set_value('dynamics_method', 'bs')
+    b.set_value('dynamics_method', 'nbody')
 
     times = np.linspace(0, 100, 10000)
     nb_ts, nb_xs, nb_ys, nb_zs, nb_vxs, nb_vys, nb_vzs = phoebe.dynamics.nbody.dynamics_from_bundle(b, times, ltte=False)
-    k_ts, k_xs, k_ys, k_zs, k_vxs, k_vys, k_vzs = phoebe.dynamics.keplerian.dynamics_from_bundle(b, times)
+    k_ts, k_xs, k_ys, k_zs, k_vxs, k_vys, k_vzs = phoebe.dynamics.keplerian.dynamics_from_bundle(b, times, ltte=False)
 
     assert(np.allclose(nb_ts, k_ts, 1e-8))
     for ci in range(len(b.hierarchy.get_stars())):
         # TODO: make atol lower (currently 1e-5 solRad which is awfully big, but 1e-6 currently fails!)
         if plot:
-            print "max atol xs:", nb_xs[ci] - k_xs[ci]
-            print "max atol ys:", nb_ys[ci] - k_ys[ci]
-            print "max atol zs:", nb_zs[ci] - k_zs[ci]
-            print "max atol vxs:", nb_vxs[ci] - k_vxs[ci]
-            print "max atol vys:", nb_vys[ci] - k_vys[ci]
-            print "max atol vzs:", nb_vzs[ci] - k_vzs[ci]
+            print "max atol xs:", max(nb_xs[ci] - k_xs[ci])
+            print "max atol ys:", max(nb_ys[ci] - k_ys[ci])
+            print "max atol zs:", max(nb_zs[ci] - k_zs[ci])
+            print "max atol vxs:", max(nb_vxs[ci] - k_vxs[ci])
+            print "max atol vys:", max(nb_vys[ci] - k_vys[ci])
+            print "max atol vzs:", max(nb_vzs[ci] - k_vzs[ci])
 
         assert(np.allclose(nb_xs[ci], k_xs[ci], atol=1e-5))
         assert(np.allclose(nb_ys[ci], k_ys[ci], atol=1e-5))

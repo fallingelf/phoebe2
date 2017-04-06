@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 phoebe.devel_on()
+phoebe.interactive_off()
 
 def _keplerian_v_nbody(b, ltte, period, plot=False):
     """
@@ -15,8 +16,7 @@ def _keplerian_v_nbody(b, ltte, period, plot=False):
 
     # TODO: loop over ltte=True,False (once keplerian dynamics supports the switch)
 
-    # b.add_compute(dynamics_method='bs')
-    b.set_value('dynamics_method', 'bs')
+    b.set_value('dynamics_method', 'nbody')
 
     times = np.linspace(0, 5*period, 101)
     nb_ts, nb_xs, nb_ys, nb_zs, nb_vxs, nb_vys, nb_vzs = phoebe.dynamics.nbody.dynamics_from_bundle(b, times, ltte=ltte)
@@ -29,7 +29,8 @@ def _keplerian_v_nbody(b, ltte, period, plot=False):
         assert(np.allclose(nb_ys[ci], k_ys[ci], rtol=1e-5, atol=1e-2))
         assert(np.allclose(nb_zs[ci], k_zs[ci], rtol=1e-5, atol=1e-2))
 
-        # nbody ltte velocities are wrong so only check velocities if ltte off
+        # nbody(bs) ltte velocities are wrong so only check velocities if ltte off
+        # TODO: can this if statement be removed now? (are we only testing against rebound and not bs?)
         if not ltte:
             assert(np.allclose(nb_vxs[ci], k_vxs[ci], rtol=1e-5, atol=1e-2))
             assert(np.allclose(nb_vys[ci], k_vys[ci], rtol=1e-5, atol=1e-2))
@@ -88,7 +89,7 @@ def _frontend_v_backend(b, ltte, period, plot=False):
     times = np.linspace(0, 5*period, 101)
     b.add_dataset('orb', times=times, dataset='orb01', components=b.hierarchy.get_stars())
     b.add_compute('phoebe', dynamics_method='keplerian', compute='keplerian', ltte=ltte)
-    b.add_compute('phoebe', dynamics_method='bs', compute='nbody', ltte=ltte)
+    b.add_compute('phoebe', dynamics_method='nbody', compute='nbody', ltte=ltte)
 
 
     # NBODY

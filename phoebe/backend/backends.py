@@ -456,6 +456,7 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
             ts, xs, ys, zs, vxs, vys, vzs, inst_ds, inst_Fs, ethetas, elongans, eincls, inst_periods, inst_smas, inst_eccs, inst_per0s, inst_long_ans, inst_incls, inst_t0_perpasses = dynamics.nbody.dynamics_from_bundle(b, times, compute, return_roche_euler=True, **kwargs)
 
         elif dynamics_method == 'bs':
+            raise NotImplementedError("dynamics_method='bs' not supported")
             # if distortion_method == 'roche':
                 # raise ValueError("distortion_method '{}' not compatible with dynamics_method '{}'".format(distortion_method, dynamics_method))
 
