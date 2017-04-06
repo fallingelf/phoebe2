@@ -110,7 +110,8 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
     # vgamma = b.get_value('vgamma', context='system', unit=u.AU/u.d) # should be extracted by keplerian.dynamics_from_bundle
     t0 = b.get_value('t0', context='system', unit=u.d)
 
-    if not _can_rebound:
+    if not _can_rebound and not phoebe.is_devel():
+        # NOTE: the phoebe.is_devel() only needs to be in place until rebound releases v 3.3.2
         raise ImportError("rebound 3.3.2+ is not installed")
 
     if gr and not _can_reboundx:
@@ -510,4 +511,3 @@ def dynamics_bs(times, masses, smas, eccs, incls, per0s, long_ans, mean_anoms,
 
         # d, solRad, solRad/d
         return ts, xs, ys, zs, vxs, vys, vzs
-
