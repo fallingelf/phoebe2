@@ -111,8 +111,8 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
     # vgamma = b.get_value('vgamma', context='system', unit=u.AU/u.d) # should be extracted by keplerian.dynamics_from_bundle
     t0 = b.get_value('t0', context='system', unit=u.d)
 
-    if not _can_rebound and not conf.devel():
-        # NOTE: the conf.devel() only needs to be in place until rebound releases v 3.3.2
+    if not _can_rebound and not conf.devel:
+        # NOTE: the conf.devel only needs to be in place until rebound releases v 3.3.2
         raise ImportError("rebound 3.3.2+ is not installed")
 
     if gr and not _can_reboundx:
