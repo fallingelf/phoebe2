@@ -4662,8 +4662,8 @@ class HierarchyParameter(StringParameter):
 
         # print "*** get_parent_of", component, trace
         if len(trace)<=1:
-            return self.get_top()
-            # return None
+            # return self.get_top()
+            return None
 
         return str(self._get_by_trace(structure, trace[:-2]+[trace[-2]-1]).split(':')[-1])
 
@@ -4863,7 +4863,11 @@ class HierarchyParameter(StringParameter):
             # TODO: is this the best fallback?
             return True
 
-        return self.get_kind_of(self.get_parent_of(component))=='orbit'
+        parent = self.get_parent_of(component)
+        if parent is None:
+            return True
+        else:
+            return self.get_kind_of(self.get_parent_of(component))=='orbit'
 
     def is_binary(self, component):
         """
