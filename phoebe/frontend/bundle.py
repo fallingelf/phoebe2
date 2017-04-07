@@ -1985,7 +1985,10 @@ class Bundle(ParameterSet):
 
         # set default for times - this way the times array for "attached"
         # components will not be empty
-        kwargs.setdefault('times', [0.])
+        if kind in ['etv']:
+            kwargs.setdefault('Ns', [0])
+        else:
+            kwargs.setdefault('times', [0.])
 
         # this needs to happen before kwargs get applied so that the default
         # values can be overridden by the supplied kwargs
