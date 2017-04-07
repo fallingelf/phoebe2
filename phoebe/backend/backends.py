@@ -728,7 +728,7 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
                 this_syn['fluxes'].append(system.observe(info['dataset'], kind=kind, components=info['component'], distance=distance, l3=l3)['flux'])
 
             elif kind=='etv':
-
+                logger.debug("computing ETVs at time={}".format(time))
                 # TODO: add support for other etv kinds (barycentric, robust, others?)
                 time_ecl = etvs.crossing(b, info['component'], time, dynamics_method, ltte, tol=computeparams.get_value('etv_tol', u.d, dataset=info['dataset'], component=info['component']))
 
