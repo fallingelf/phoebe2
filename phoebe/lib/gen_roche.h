@@ -742,6 +742,7 @@ namespace gen_roche {
     utils::solve_quartic(a, roots);
 
     // grab the smallest/first root in [0,1]
+    //for (auto && v : roots) std::cerr << "root=" << v << '\n';
 
     for (auto && v : roots) if (0 < v && v < 1) return v;
     
@@ -1011,7 +1012,8 @@ namespace gen_roche {
       xrange[1] = delta*right_lobe_right_xborder(w, q, b);
     }
 
-
+    //std::cerr << "BU:" << xrange[0] << '\t' << xrange[1] << std::endl;
+    
     if (std::isnan(xrange[0])) {
       std::cerr << "lobe_xrange::problems with left boundary\n";
       return false;

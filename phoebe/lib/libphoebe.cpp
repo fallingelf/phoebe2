@@ -3682,7 +3682,7 @@ bool LDmodelFromListOfTuples(
               "nonlinear"   3 parameters
               "logarithmic" 2 parameters
               "square_root" 2 parameters
-              "power"      4 parameters
+              "power"       4 parameters
               "interp"      interpolation data  TODO !!!!
               
     LDidx[]: 1-rank numpy array of indices of LD models used on each triangle/vertex
@@ -3829,7 +3829,6 @@ static PyObject *mesh_radiosity_problem(
     }
   }
  
-  
   for (auto && ld: LDmod) delete ld;
   LDmod.clear();
   
@@ -4049,8 +4048,9 @@ static PyObject *mesh_radiosity_problem_nbody_convex(
   //
   // Check is there is interpolation is used
   //
+  
   bool st_interp = false;
-
+  
   for (auto && pld : LDmod) if (pld == 0) {
     st_interp = true;
     break;
@@ -4258,24 +4258,36 @@ static PyObject *mesh_radiosity_problem_nbody_convex(
 struct Tmesh_radiosity_redistrib_problem_nbody {
   
   bool 
-    use_stored, 
-    redistr_stored, 
-    reflect_stored;
+    use,
+    stored,
+    only_reflection;
   
-  int  
-    process_type;
-    
-  std::vector<Tview_factor_nbody<double>> Fmat;
-  std::vector<std::vector<Tsparse_mat_elem<double>>> Dmat;
+  int nb;
   
-  Tmesh_radiosity_redistrib_problem_nbody() {
+  Tsupport_type support;
     
-    use_stored = false,     // whether we use this structure to store 
-                            // redistr metrices  
-    redistr_stored = false, // true - needs to be set, false - it is already set
-    reflect_stored = false; // true - needs to be set, false - it is already set
+  std::vector<Tview_factor_nbody<double>> Lmat;
+  
+  std::vector<Tredistribution<double>> Dmat;
+  
+  Tmesh_radiosity_redistrib_problem_nbody() { clear();} 
+  
+  
+  void clear(bool _use = false) {
     
-    process_type = -1;
+    use = _use;      // whether we use this structure to store 
+    
+    stored = false;  // true - needs to be set, false - it is already set
+    
+    only_reflection = false;
+    
+    nb = 0;           // number of bodies
+    
+    support = triangles;
+    
+    Lmat.clear();
+    
+    Dmat.clear();
   }
   
 } __redistrib_problem_nbody;
@@ -4286,16 +4298,16 @@ static PyObject *mesh_radiosity_redistrib_problem_nbody_convex_setup(
   const char *fname = "mesh_radiosity_redistrib_problem_nbody_convex_setup";
 
   char *kwlist[] = {
-    (char*)"use_stored",
+    (char*)"use",
     (char*)"reset", 
     NULL
   };   
  
- PyObject *o_use_stored, *o_reset;
+ PyObject *o_use, *o_reset;
 
   if (!PyArg_ParseTupleAndKeywords(
         args, keywds,  "O!O!", kwlist,
-        &PyBool_Type, &o_use_stored,         // neccesary 
+        &PyBool_Type, &o_use,         // neccesary 
         &PyBool_Type, &o_reset)
       ) {
     std::cerr << fname << "::Problem reading arguments\n";
@@ -4303,20 +4315,11 @@ static PyObject *mesh_radiosity_redistrib_problem_nbody_convex_setup(
   }
   
   bool
-    b_use_stored = PyObject_IsTrue(o_use_stored),
+    b_use = PyObject_IsTrue(o_use),
     b_reset = PyObject_IsTrue(o_reset);
+     
+  if (b_reset) __redistrib_problem_nbody.clear(b_use);
     
-  __redistrib_problem_nbody.use_stored = b_use_stored;
- 
-  if (b_reset) {
-    __redistrib_problem_nbody.redistr_stored = false;
-    __redistrib_problem_nbody.reflect_stored = false;
-    __redistrib_problem_nbody.process_type = -1;
-    
-    __redistrib_problem_nbody.Dmat.clear();
-    __redistrib_problem_nbody.Fmat.clear();
-  }
-  
   Py_INCREF(Py_None);
   
   return Py_None;
@@ -4379,319 +4382,233 @@ static PyObject *mesh_radiosity_redistrib_problem_nbody_convex(
     std::cerr << fname << "::Problem reading arguments\n";
     return NULL;
   }
-    
-  //
-  // Reading LD models
-  //  
 
-  std::vector<TLDmodel<double>*> LDmod;
+  //
+  // Number of bodies
+  //
   
-  if (!LDmodelFromListOfTuples(oLDmod, LDmod)){
-    std::cerr << fname << "::Not able to read LD models\n"; 
-    return NULL;
-  }
+  int nb = PyList_Size(oF0);
  
-  #if 0
-  {
-    int i = 0;
-    for (auto && pld: LDmod)
-      std::cerr << i++ << " LD:type=" << pld->type << '\n';
-  }
-  #endif
-    
-  //
-  // Checking number of bodies
-  //
-  
-  int n = LDmod.size();
-  
-  if (n <= 1){
-    std::cerr << fname << "::There seem to just n=" << n << " bodies.\n";
-    return NULL;
-  }
-
-  //
-  // Check is there is interpolation is used
-  //
-  
-  bool st_interp = false;
-  
-  for (auto && pld : LDmod) if (pld == 0) {
-    st_interp = true;
-    break;
-  }
- 
-  if (st_interp) {
-    std::cerr << fname << "::This is not yet implemented\n";
+  if (nb <= 1){
+    std::cerr << fname << "::There seem to just n=" << nb << " bodies.\n";
     return NULL;
   }
   
   //
-  // Reading support type
-  //
-
-  int support; 
-  {
-    char *s = PyString_AsString(osupport);
-    
-    switch (fnv1a_32::hash(s)) {
-      case "triangles"_hash32: support = 0; break;
-      case "vertices"_hash32: support = 1; break;
-      
-      default:
-        std::cerr 
-          << fname 
-          << "::This support type = " << s 
-          << "is not supported\n";
-        return NULL;
-    }
-  }
-
-  //
-  // Reading arrays
+  // Reading input intensities arrays and reflection : ALWAYS READ
   //
    
-  std::vector<std::vector<T3Dpoint<double>>> V(n), N(n);
-  std::vector<std::vector<T3Dpoint<int>>> Tr(n);
-  std::vector<std::vector<double>> A(n), R(n), F0(n), F1, Fout;
- 
-  for (int b = 0; b < n; ++b){
-    PyArray_To3DPointVector((PyArrayObject *)PyList_GetItem(oV, b), V[b]);
-    PyArray_To3DPointVector((PyArrayObject *)PyList_GetItem(oN, b), N[b]);
-    PyArray_To3DPointVector((PyArrayObject *)PyList_GetItem(oTr, b), Tr[b]);
- 
-    PyArray_ToVector((PyArrayObject *)PyList_GetItem(oA, b), A[b]);
-    PyArray_ToVector((PyArrayObject *)PyList_GetItem(oR, b), R[b]);
+  std::vector<std::vector<double>> F0(nb), R(nb);
+  
+  for (int b = 0; b < nb; ++b) {
     PyArray_ToVector((PyArrayObject *)PyList_GetItem(oF0, b), F0[b]);
+    PyArray_ToVector((PyArrayObject *)PyList_GetItem(oR, b), R[b]);
   }
   
   //
-  // Reading redistribution models
-  // 
+  // Matrices needed to reflection-redistribution processes
+  //
+  Tsupport_type support;
   
-  bool only_reflection;
- 
-  std::vector<std::vector<Tsparse_mat_elem<double>>> Dmat;
+  bool only_reflection = true;
+
+  std::vector<Tredistribution<double>> Dmat(nb);
+  
+  std::vector<Tview_factor_nbody<double>> Lmat;
+  
+  if (__redistrib_problem_nbody.use && __redistrib_problem_nbody.stored) {
+  
+    only_reflection = __redistrib_problem_nbody.only_reflection;
     
-  if (!__redistrib_problem_nbody.use_stored || (__redistrib_problem_nbody.use_stored && __redistrib_problem_nbody.process_type < 0)) {
+    Lmat = __redistrib_problem_nbody.Lmat;
+    Dmat = __redistrib_problem_nbody.Dmat;
+    
+    support =  __redistrib_problem_nbody.support;
+    
+  } else {
   
-    std::vector<std::map<fnv1a_32::hash_t, std::vector<double>>> Dpars(n);
-    std::vector<std::map<fnv1a_32::hash_t, double>> Dweights(n);
+    //
+    // Reading support type
+    //
+
+    {
+      char *s = PyString_AsString(osupport);
+      
+      switch (fnv1a_32::hash(s)) {
+        case "triangles"_hash32: support = triangles; break;
+        case "vertices"_hash32: support = vertices; break;
+        
+        default:
+          std::cerr 
+            << fname 
+            << "::This support type = " << s << "is not supported\n";
+          return NULL;
+      }
+    }
+    
+    //
+    // Reading geometry of the bodies
+    //
+    
+    std::vector<std::vector<T3Dpoint<double>>> V(nb), N(nb);
+    std::vector<std::vector<T3Dpoint<int>>> Tr(nb);
+    std::vector<std::vector<double>> A(nb);
+   
+    for (int b = 0; b < nb; ++b){
+     
+      PyArray_To3DPointVector((PyArrayObject *)PyList_GetItem(oV, b), V[b]);
+      PyArray_To3DPointVector((PyArrayObject *)PyList_GetItem(oN, b), N[b]);
+      PyArray_To3DPointVector((PyArrayObject *)PyList_GetItem(oTr, b), Tr[b]);
+      PyArray_ToVector((PyArrayObject *)PyList_GetItem(oA, b), A[b]);
+    }
+   
+    //
+    // Calculate redistribution matrices 
+    //
+    
+    struct Tlinear_edge {
+      double operator()(const double &x , const double &thresh) const {
+        if (std::abs(x) <= thresh) return 1.0 - std::abs(x)/thresh;
+        return 0.0;
+      }
+    };
     
     {
       Py_ssize_t pos;
       
       PyObject *o, *key, *value;
       
-      auto dp = Dpars.begin();
-      auto dw = Dweights.begin();
-        
-      for (int b = 0; b < n; ++b){
-        
+      for (int b = 0; b < nb; ++b){
+
+        std::map<fnv1a_32::hash_t, std::vector<double>> Dpars;
+        std::map<fnv1a_32::hash_t, double> Dweights;
+          
         // reading redistribution model parameters 
         o = PyList_GetItem(oDmod, b);
         pos = 0;
         while (PyDict_Next(o, &pos, &key, &value))
-          PyArray_ToVector((PyArrayObject*)value, (*dp)[fnv1a_32::hash(PyString_AsString(key))]);
+          PyArray_ToVector((PyArrayObject*)value, Dpars[fnv1a_32::hash(PyString_AsString(key))]);
         
         // reading weights for redistribution model
         o = PyList_GetItem(oDweight, b);
         pos = 0;
         while (PyDict_Next(o, &pos, &key, &value))
-          (*dw)[fnv1a_32::hash(PyString_AsString(key))] = PyFloat_AsDouble(value);
-        ++dp;
-        ++dw;
+          Dweights[fnv1a_32::hash(PyString_AsString(key))] = PyFloat_AsDouble(value);
+
+      
+        if (!Dmat[b].init<Tlinear_edge> (support, V[b], Tr[b], N[b], A[b], Dpars, Dweights)){
+           std::cerr << fname << "::Redistribution matrix calculation failed\n";
+           return NULL;
+        }
+        
+        if (!Dmat[b].is_trivial()) only_reflection = false;
       }
     }
+    //
+    // Reading LD models
+    //  
+
+    std::vector<TLDmodel<double>*> LDmod;
     
-    // Clean list of models that need to be calculated for each objects
+    if (!LDmodelFromListOfTuples(oLDmod, LDmod)){
+      std::cerr << fname << "::Not able to read LD models\n"; 
+      return NULL;
+    }
+   
+    #if 0
     {
-      auto h_none = "none"_hash32;
-     
-      for (int b = 0; b < n; ++b) {
-        
-        std::map<fnv1a_32::hash_t, std::vector<double>> Dpars1;
-         
-        for (auto && w : Dweights[b])
-          if (w.first != h_none && w.second != 0)
-            Dpars1[w.first] = Dpars[b][w.first];
-     
-        Dpars[b] = Dpars1;
-      }
+      int i = 0;
+      for (auto && pld: LDmod)
+        std::cerr << i++ << " LD:type=" << pld->type << '\n';
     }
+    #endif
   
     //
-    // If only none is used as redistribution model
-    // we internally switch to reflection
+    // Check is there is interpolation is used
     //
-    only_reflection = true;
-    for (int b = 0; b < n; ++b)
-      if (Dweights[b].size() != 0) {
-        only_reflection = false;
-        break;
-      }
-  
-    __redistrib_problem_nbody.process_type = (only_reflection ? 1 : 0);
-  
-  
-    if (!only_reflection) {
-       
-      Dmat.resize(n);
       
-      //
-      // Calculate redistribution matrices
-      //
-      
-      std::vector<std::map<fnv1a_32::hash_t, std::vector<Tsparse_mat_elem<double>>>> Dmats(n);
-       
-      {
-        bool st = true; 
-
-        if (0) {
-
-          for (int b = 0; st && b < n; ++b)
-            st = (support == 0 ?
-              triangle_mesh_redistribution_matrix_triangles(V[b], Tr[b], N[b], A[b], Dpars[b], Dmats[b]) :
-              triangle_mesh_redistribution_matrix_vertices(V[b], Tr[b], N[b], A[b], Dpars[b], Dmats[b])
-            );
-
-        } else {
-          
-          struct Tlinear_edge {
-            double operator()(const double &x , const double &thresh) const {
-              if (std::abs(x) <= thresh) return 1.0 - std::abs(x)/thresh;
-              return 0.0;
-            }
-          };
-        
-          for (int b = 0; st && b < n; ++b)
-            st = (support == 0 ?
-              triangle_mesh_redistribution_matrix_triangles<double, Tlinear_edge >(V[b], Tr[b], N[b], A[b], Dpars[b], Dmats[b]) :
-              triangle_mesh_redistribution_matrix_vertices<double, Tlinear_edge >(V[b], Tr[b], N[b], A[b], Dpars[b], Dmats[b])
-            );
-        }
-        
-        if (!st) {
-          std::cerr << fname << "::Redistribution matrix calculation failed\n";
-          return NULL;
-        }
-      }
-     
-      //
-      // Determine the final redistribution matrix
-      //
-      for (int b = 0; b < n; ++b)
-        if (support == 0)
-          add_sparse_matrices(Tr[b].size(), Dweights[b], Dmats[b], Dmat[b]);
-        else
-          add_sparse_matrices(V[b].size(), Dweights[b], Dmats[b], Dmat[b]);
+    bool st_interp = false;
     
-      if (__redistrib_problem_nbody.use_stored && !__redistrib_problem_nbody.redistr_stored) {
-        __redistrib_problem_nbody.Dmat = Dmat;
-        __redistrib_problem_nbody.redistr_stored = true;
-      }
+    for (auto && pld : LDmod) if (pld == 0) {
+      st_interp = true;
+      break;
     }
-  
-  } else {
-    only_reflection = (__redistrib_problem_nbody.process_type == 1);
-    if (!only_reflection) Dmat = __redistrib_problem_nbody.Dmat;
-  }
-  
-  //
-  // Determine the LD view-factor matrix
-  //
-
-  std::vector<Tview_factor_nbody<double>> Fmat;
-  
-  if (__redistrib_problem_nbody.use_stored && __redistrib_problem_nbody.reflect_stored) 
-    Fmat = __redistrib_problem_nbody.Fmat;
-  else {
-      
-    if (support == 0)  
-      triangle_mesh_radiosity_matrix_triangles_nbody_convex(V, Tr, N, A, LDmod, Fmat);
+   
+    if (st_interp) {
+      std::cerr << fname << "::This is not yet implemented\n";
+      return NULL;
+    }
+    
+    //
+    // Calculate view-factor matrices
+    //
+    
+    if (support == triangles)  
+      triangle_mesh_radiosity_matrix_triangles_nbody_convex(V, Tr, N, A, LDmod, Lmat);
     else
-      triangle_mesh_radiosity_matrix_vertices_nbody_convex(V, Tr, N, A, LDmod, Fmat);
-
-    if (__redistrib_problem_nbody.use_stored && !__redistrib_problem_nbody.reflect_stored) {
-      __redistrib_problem_nbody.Fmat = Fmat;
-      __redistrib_problem_nbody.reflect_stored = true;
+      triangle_mesh_radiosity_matrix_vertices_nbody_convex(V, Tr, N, A, LDmod, Lmat);
+   
+   
+    for (auto && ld: LDmod) delete ld;
+    LDmod.clear();
+  
+    //
+    // storing matrices if needed
+    //
+    
+    if (__redistrib_problem_nbody.use) {
+      __redistrib_problem_nbody.Lmat = Lmat;
+      __redistrib_problem_nbody.Dmat = Dmat;
+      __redistrib_problem_nbody.only_reflection = only_reflection;
+      __redistrib_problem_nbody.support = support;
+      __redistrib_problem_nbody.nb = nb;
+      __redistrib_problem_nbody.stored = true;
     }
   }
-  
-  for (auto && ld: LDmod) delete ld;
-  LDmod.clear();
-  
+
   //
-  //  Solving radiosity equations
-  //  
-  if (!only_reflection) {
-  
-    //
-    // Solving the radiosity-redistribution equation depending on the model
-    //
-    {
-      bool st = false;
-      
-      char *s = PyString_AsString(omodel);
-        
-      switch (fnv1a_32::hash(s)) {
-        
-        case "Wilson"_hash32:
-          st = solve_radiosity_equation_with_redistribution_Wilson_nbody(Fmat, Dmat, R, F0, F1, Fout);
-        break;
-        
-        case "Horvat"_hash32:
-          st = solve_radiosity_equation_with_redistribution_Horvat_nbody(Fmat, Dmat, R, F0, F1, Fout);
-        break;
-        
-        default:
-          std::cerr 
-            << fname << "::This radiosity-redistribution model ="
-            << s << " does not exist\n";
-          return NULL;
-      }
-      
-      if (!st) std::cerr << fname << "::slow convergence\n";
-    }
-  } else {
+  // Solving the irradiations equations depending on the model
+  //
+ 
+  std::vector<std::vector<double>> F1, Fout;
+  {
+    bool st = false;
     
-    //
-    // Solving the radiosity equation depending on the model
-    //
-    {
-      bool st = false;
+    char *s = PyString_AsString(omodel);
       
-      char *s = PyString_AsString(omodel);
-        
-      switch (fnv1a_32::hash(s)) {
-        
-        case "Wilson"_hash32:
-        st = solve_radiosity_equation_Wilson_nbody(Fmat, R, F0, Fout);
-        break;
-        
-        case "Horvat"_hash32:
-        st = solve_radiosity_equation_Horvat_nbody(Fmat, R, F0, Fout);
-        break;
-        
-        default:
-          std::cerr 
-            << fname << "::This radiosity model ="
-            << s << " does not exist\n";
-          return NULL;
-      }
+    switch (fnv1a_32::hash(s)) {
       
-      if (!st) std::cerr << fname << "::slow convergence\n";
+      case "Wilson"_hash32:
+        if (only_reflection)
+          st = solve_radiosity_equation_Wilson_nbody(Lmat, R, F0, Fout);
+        else
+          st = solve_radiosity_equation_with_redistribution_Wilson_nbody(Lmat, Dmat, R, F0, F1, Fout);
+      break;
+      
+      case "Horvat"_hash32:
+        if (only_reflection)
+          st = solve_radiosity_equation_Horvat_nbody(Lmat, R, F0, Fout);
+        else
+          st = solve_radiosity_equation_with_redistribution_Horvat_nbody(Lmat, Dmat, R, F0, F1, Fout);
+      break;
+      
+      default:
+        std::cerr 
+          << fname << "::This radiosity-redistribution model ="
+          << s << " does not exist\n";
+        return NULL;
     }
-  
-    // nothing happens to exitance !!!!
-    F1 = F0;
+    
+    if (only_reflection) F1 = F0;  // nothing happens to exitance !!!!
+    
+    if (!st) std::cerr << fname << "::slow convergence\n";
   }
 
   PyObject *results = PyDict_New();
   
-  PyObject *oFout = PyList_New(n), *oF1 = PyList_New(n);
+  PyObject *oFout = PyList_New(nb), *oF1 = PyList_New(nb);
     
-  for (int b = 0; b < n; ++b) {
+  for (int b = 0; b < nb; ++b) {
     PyList_SetItem(oFout, b, PyArray_FromVector(Fout[b]));
     PyList_SetItem(oF1, b, PyArray_FromVector(F1[b]));
   }
@@ -5745,7 +5662,6 @@ static PyObject *ld_D(PyObject *self, PyObject *args, PyObject *keywds) {
 }
 
 
-
 /*
   C++ wrapper for Python code:
 
@@ -5810,7 +5726,6 @@ static PyObject *ld_D0(PyObject *self, PyObject *args, PyObject *keywds) {
   
   return PyFloat_FromDouble(LD::D0(type, (double*)PyArray_DATA(o_params)));
 }
-
 
 
 /*
