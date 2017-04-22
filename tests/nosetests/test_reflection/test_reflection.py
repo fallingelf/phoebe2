@@ -49,7 +49,7 @@ def test_binary(plot=False):
         b.set_value_all('irrad_frac_refl_bol', alb)
         
         # applying a hack to speed up redistribution-reflection calculation
-        libphoebe.mesh_radiosity_redistrib_problem_nbody_convex_setup(use_stored=True, reset=True)
+        libphoebe.mesh_radiosity_redistrib_problem_nbody_convex_setup(use=True, reset=True)
         
         print "running phoebe2 model..."
         b.run_compute(compute='phoebe2', ntriangles=1000, model='phoebe2model')
