@@ -617,9 +617,12 @@ namespace gen_roche {
           
       } while ( std::abs(dt) > eps*std::abs(t) + min && ++it < iter_max);
       
-      if (!(it < iter_max))
-        std::cerr << "left_lobe_left_xborder::slow convergence\n";
-      
+      if (!(it < iter_max)) {
+        std::cerr.precision(std::numeric_limits<T>::digits10);
+        std::cerr 
+          << "left_lobe_left_xborder::slow convergence\n"
+          <<  "w=" << w << " q=" << q << " b=" << b  << " t=" << t << "\n";
+      }
       #if 0
       std::cerr << "t1=" << t  << '\n';
       #endif
@@ -724,9 +727,12 @@ namespace gen_roche {
         //std::cerr << it << '\t' << t << '\t' << dt << '\n';
       } while (std::abs(dt) > eps*std::abs(t) + min && ++it < iter_max);
       
-      if (!(it < iter_max))
-        std::cerr << "left_lobe_right_xborder::slow convergence\n";
-      
+      if (it >= iter_max) {
+        std::cerr.precision(std::numeric_limits<T>::digits10);
+        std::cerr 
+          << "left_lobe_left_xborder::slow convergence\n"
+          <<  "w=" << w << " q=" << q << " b=" << b  << " t=" << t << "\n";
+      }
       #if 0
       std::cerr << "t1=" << t  << '\n';
       #endif
@@ -801,9 +807,12 @@ namespace gen_roche {
           
        } while ( std::abs(dt) > eps*std::abs(t) + min && ++it < iter_max);
       
-      if (!(it < iter_max))
-        std::cerr << "right_lobe_left_xborder::slow convergence\n";
-
+      if (it >= iter_max){
+        std::cerr.precision(std::numeric_limits<T>::digits10);
+        std::cerr 
+          << "right_lobe_left_xborder::slow convergence\n"
+          <<  "w=" << w << " q=" << q << " b=" << b  << " t=" << t << "\n";
+      }
       return t;
     }
     
@@ -872,9 +881,13 @@ namespace gen_roche {
           
        } while (std::abs(dt) > eps*std::abs(t) + min && ++it < iter_max);
       
-      if (!(it < iter_max))
-        std::cerr << "right_lobe_right_xborder::slow convergence\n";
-
+      if (it > iter_max){
+        std::cerr.precision(std::numeric_limits<T>::digits10);
+        std::cerr 
+          << "right_lobe_right_xborder::slow convergence\n"
+          <<  "w=" << w << " q=" << q << " b=" << b  << " t=" << t << "\n";
+      }
+      
       return t;
     }
     
