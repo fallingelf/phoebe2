@@ -309,6 +309,7 @@ def dynamics(times, periods, eccs, smas, t0_perpasses, per0s, long_ans, incls,
 
 
 
+    corrected_times = []
     xs, ys, zs = [], [], []
     vxs, vys, vzs = [], [], []
 
@@ -348,7 +349,7 @@ def dynamics(times, periods, eccs, smas, t0_perpasses, per0s, long_ans, incls,
                     dperdt, components=component, t0=t0, vgamma=vgamma, \
                     mass_conservation=mass_conservation)
 
-
+        corrected_times.append(propertimes if ltte else times)
         xs.append(pos[0])
         ys.append(pos[1])
         zs.append(pos[2])
@@ -362,12 +363,12 @@ def dynamics(times, periods, eccs, smas, t0_perpasses, per0s, long_ans, incls,
 
     # d, solRad, solRad/d, rad
     if return_euler:
-        return times, \
+        return times, corrected_times, \
             xs, ys, zs, \
             vxs, vys, vzs, \
             ethetas, elongans, eincls
     else:
-        return times, \
+        return times, corrected_times, \
             xs, ys, zs, \
             vxs, vys, vzs
 

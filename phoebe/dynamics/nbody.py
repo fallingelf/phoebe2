@@ -118,7 +118,7 @@ def dynamics_from_bundle(b, times, compute=None, return_roche_euler=False, use_k
     if gr and not _can_reboundx:
         raise ImportError("reboundx is not installed (required for gr effects)")
 
-    dump, xs, ys, zs, vxs, vys, vzs = keplerian.dynamics_from_bundle(b, [t0], compute=compute)
+    dump, dump, xs, ys, zs, vxs, vys, vzs = keplerian.dynamics_from_bundle(b, [t0], compute=compute)
 
     def mean_anom(t0, t0_perpass, period):
         # TODO: somehow make this into a constraint where t0 and mean anom

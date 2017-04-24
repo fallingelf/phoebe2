@@ -35,7 +35,7 @@ def crossing(b, component, time, dynamics_method='keplerian', ltte=True, tol=1e-
 
         elif dynamics_method=='keplerian':
             # TODO: make sure that this takes systemic velocity and corrects positions and velocities (including ltte effects if enabled)
-            ts, xs, ys, zs, vxs, vys, vzs = dynamics.keplerian.dynamics_from_bundle(b, times, compute=None, ltte=ltte, return_euler=False)
+            ts, corrected_ts, xs, ys, zs, vxs, vys, vzs = dynamics.keplerian.dynamics_from_bundle(b, times, compute=None, ltte=ltte, return_euler=False)
 
         else:
             raise NotImplementedError
@@ -58,4 +58,3 @@ def crossing(b, component, time, dynamics_method='keplerian', ltte=True, tol=1e-
         return time
 
     return res.x[0]
-

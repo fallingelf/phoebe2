@@ -479,8 +479,8 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
         elif dynamics_method=='keplerian':
 
             # TODO: make sure that this takes systemic velocity and corrects positions and velocities (including ltte effects if enabled)
-            t0, xs0, ys0, zs0, vxs0, vys0, vzs0, ethetas0, elongans0, eincls0 = dynamics.keplerian.dynamics_from_bundle(b, [t0], compute, return_euler=True, **kwargs)
-            ts, xs, ys, zs, vxs, vys, vzs, ethetas, elongans, eincls = dynamics.keplerian.dynamics_from_bundle(b, times, compute, return_euler=True, **kwargs)
+            t0, corrected_ts, xs0, ys0, zs0, vxs0, vys0, vzs0, ethetas0, elongans0, eincls0 = dynamics.keplerian.dynamics_from_bundle(b, [t0], compute, return_euler=True, **kwargs)
+            ts, corrected_ts, xs, ys, zs, vxs, vys, vzs, ethetas, elongans, eincls = dynamics.keplerian.dynamics_from_bundle(b, times, compute, return_euler=True, **kwargs)
 
         else:
             raise NotImplementedError
@@ -753,6 +753,8 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
                 this_syn['vxs'].append(vxi[cind])
                 this_syn['vys'].append(vyi[cind])
                 this_syn['vzs'].append(vzi[cind])
+                if dynamics_method in ['keplerian']:
+                    this_syn['corrected_times'].append(corrected_ts[cind][i])
 
             elif kind=='mesh':
                 # print "*** info['component']", info['component'], " info['dataset']", info['dataset']
@@ -797,9 +799,9 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
                 this_syn['visibilities'] = body.mesh.visibilities
 
                 vcs = np.sum(body.mesh.vertices_per_triangle*body.mesh.weights[:,:,np.newaxis], axis=1)
-                for i,vc in enumerate(vcs):
+                for j,vc in enumerate(vcs):
                     if np.all(vc==np.array([0,0,0])):
-                        vcs[i] = np.full(3, np.nan)
+                        vcs[j] = np.full(3, np.nan)
                 this_syn['visible_centroids'] = vcs
 
                 # Eclipse horizon
