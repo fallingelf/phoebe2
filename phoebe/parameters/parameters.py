@@ -4093,9 +4093,13 @@ class FloatParameter(Parameter):
 
         # handle wrapping for angle measurements
         if value.unit.physical_type == 'angle':
-            if value > (360*u.deg) or value < (0*u.deg):
-                value = value % (360*u.deg)
-                logger.warning("wrapping value of {} to {}".format(self.qualifier, value))
+            if self.__class__.__name__ == 'FloatArrayParameter':
+                # TODO: implement wrapping for arrays
+                logger.warning('angle wrapping not implemented for FloatArrayParameters')
+            else:
+                if value > (360*u.deg) or value < (0*u.deg):
+                    value = value % (360*u.deg)
+                    logger.warning("wrapping value of {} to {}".format(self.qualifier, value))
 
         # make sure the value is within the limits
         if not self.within_limits(value):

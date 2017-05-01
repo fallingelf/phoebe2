@@ -305,6 +305,9 @@ def orb_syn(syn=True, **kwargs):
 
         syn_params += [FloatArrayParameter(qualifier='corrected_times', value=kwargs.get('corrected_times', []), default_unit=u.d, description='Local time of the object (ie. ltte correct if applicable)')]
 
+        syn_params += [FloatArrayParameter(qualifier='ethetas', value=kwargs.get('ethetas', []), default_unit=u.rad, description='Euler angle corresponding to theta')]
+        syn_params += [FloatArrayParameter(qualifier='elongans', value=kwargs.get('elongans', []), default_unit=u.rad, description='Euler angle corresponding to long_an')]
+        syn_params += [FloatArrayParameter(qualifier='eincls', value=kwargs.get('eincls', []), default_unit=u.rad, description='Euler angle corresponding to inclination')]
 
     constraints = []
 

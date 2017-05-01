@@ -114,6 +114,8 @@ def _extract_from_bundle_by_time(b, compute, protomesh=False, pbmesh=False, time
             #if not len(this_times):
             #    # then override with passed times if available
             #    this_times = time
+            if isinstance(this_times, float) or isinstance(this_times, int):
+                this_times = [this_times]
             if len(this_times) and provided_times is not None:
                 # then overrride the dataset times with the passed times
                 this_times = provided_times
@@ -733,7 +735,8 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
                 time_ecl = etvs.crossing(b, info['component'], time, dynamics_method, ltte, tol=computeparams.get_value('etv_tol', u.d, dataset=info['dataset'], component=info['component']))
 
                 this_obs = b.filter(dataset=info['dataset'], component=info['component'], context='dataset')
-                this_syn['Ns'].append(this_obs.get_parameter(qualifier='Ns').interp_value(time_ephems=time))  # TODO: there must be a better/cleaner way to do this
+                # TODO: we need to populate Ns... either as times are straight from the obs or by fixing this statement (currently doesn't work for len=1)
+                # this_syn['Ns'].append(this_obs.get_parameter(qualifier='Ns')[len(this_syn['Ns'])])  # TODO: there must be a better/cleaner way to do this
                 this_syn['time_ephems'].append(time)  # NOTE: no longer under constraint control
                 this_syn['time_ecls'].append(time_ecl)
                 this_syn['etvs'].append(time_ecl-time)  # NOTE: no longer under constraint control
@@ -755,6 +758,9 @@ def phoebe(b, compute, times=[], as_generator=False, **kwargs):
                 this_syn['vzs'].append(vzi[cind])
                 if dynamics_method in ['keplerian']:
                     this_syn['corrected_times'].append(corrected_ts[cind][i])
+                    this_syn['ethetas'].append(ethetai[cind]*u.rad)
+                    this_syn['elongans'].append(elongani[cind]*u.rad)
+                    this_syn['eincls'].append(eincli[cind]*u.rad)
 
             elif kind=='mesh':
                 # print "*** info['component']", info['component'], " info['dataset']", info['dataset']
