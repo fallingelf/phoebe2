@@ -617,7 +617,7 @@ namespace gen_roche {
           
       } while ( std::abs(dt) > eps*std::abs(t) + min && ++it < iter_max);
       
-      if (!(it < iter_max)) {
+      if (it >= iter_max) {
         std::cerr.precision(std::numeric_limits<T>::digits10);
         std::cerr 
           << "left_lobe_left_xborder::slow convergence\n"
@@ -730,7 +730,7 @@ namespace gen_roche {
       if (it >= iter_max) {
         std::cerr.precision(std::numeric_limits<T>::digits10);
         std::cerr 
-          << "left_lobe_left_xborder::slow convergence\n"
+          << "left_lobe_right_xborder::slow convergence\n"
           <<  "w=" << w << " q=" << q << " b=" << b  << " t=" << t << "\n";
       }
       #if 0
@@ -881,7 +881,7 @@ namespace gen_roche {
           
        } while (std::abs(dt) > eps*std::abs(t) + min && ++it < iter_max);
       
-      if (it > iter_max){
+      if (it >= iter_max){
         std::cerr.precision(std::numeric_limits<T>::digits10);
         std::cerr 
           << "right_lobe_right_xborder::slow convergence\n"
