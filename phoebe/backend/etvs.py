@@ -6,6 +6,7 @@ from phoebe import c, u
 from scipy.optimize import minimize
 
 logger = logging.getLogger("ETVS")
+logger.addHandler(logging.NullHandler())
 
 _ltte_scale_factor = (c.R_sun/c.c).to(u.d).value
 
@@ -15,7 +16,7 @@ def barycentric():
     raise NotImplementedError
 
 
-def crossing(b, component, time, dynamics_method='keplerian', ltte=True, tol=1e-8):
+def crossing(b, component, time, dynamics_method='keplerian', ltte=True, tol=1e-6):
     """
     tol in days
     """
@@ -27,7 +28,7 @@ def crossing(b, component, time, dynamics_method='keplerian', ltte=True, tol=1e-
         #print "*** projected_separation_sq", time, dynamics_method, cind1, cind2, ltte
 
 
-        times = np.array([time])
+        times = np.asarray(time)
 
         if dynamics_method in ['nbody', 'rebound']:
             # TODO: make sure that this takes systemic velocity and corrects positions and velocities (including ltte effects if enabled)
@@ -43,8 +44,18 @@ def crossing(b, component, time, dynamics_method='keplerian', ltte=True, tol=1e-
         else:
             raise NotImplementedError
 
+        x1prime = xs[cind1][0] * np.cos(elongans[cind1][0])
+        x2prime = xs[cind2][0] * np.cos(elongans[cind2][0])
+        y1prime = ys[cind1][0] * np.sin(elongans[cind1][0])
+        y2prime = ys[cind2][0] * np.sin(elongans[cind2][0])
 
-        return (np.cos(ethetas[cind1][0])-np.cos(ethetas[cind2][0]))**2
+        # print elongans[cind1][0], elongans[cind2][0]
+        # print x1prime, x2prime, y1prime, y2prime
+        # print times, (x2prime-x1prime)**2 + (y2prime-y1prime)**2
+
+        return (x2prime-x1prime)**2 + (y2prime-y1prime)**2
+
+        # return (np.cos(ethetas[cind1][0])-np.cos(ethetas[cind2][0]))**2
         # return (xs[cind2][0]-xs[cind1][0])**2 + (ys[cind2][0]-ys[cind1][0])**2
         # return (xs[cind2][0]-xs[cind1][0])**2
 
@@ -60,12 +71,15 @@ def crossing(b, component, time, dynamics_method='keplerian', ltte=True, tol=1e-
     # guess = time + np.mean(zs)*_ltte_scale_factor
 
     # TODO: find the best minimizer (ie most efficient)
-    res = minimize(projected_separation_sq, x0=[time], method='TNC', args=(b, dynamics_method, cind1, cind2, ltte), options={'xtol': tol}, bounds=((time-orb_period/2., time+orb_period/2.),))
+    # res = minimize(projected_separation_sq, x0=[time], method='TNC', args=(b, dynamics_method, cind1, cind2, ltte), options={'xtol': tol}, bounds=((time-orb_period/2., time+orb_period/2.),))
+    # res = minimize(projected_separation_sq, x0=[time], method='TNC', args=(b, dynamics_method, cind1, cind2, ltte), options={'xtol': 1e-3, 'ftol': 1e-3}, bounds=((time-orb_period/2., time+orb_period/2.),))
+    res = minimize(projected_separation_sq, x0=[time], method='SLSQP', args=(b, dynamics_method, cind1, cind2, ltte), options={'ftol': tol}, bounds=((time-orb_period/2., time+orb_period/2.),))
     # res = minimize(projected_separation_sq, x0=[time], method='Nelder-Mead', args=(b, dynamics_method, cind1, cind2, ltte), options={'xatol': tol})
     # res = minimize(projected_separation_sq, x0=[time], method='Powell', args=(b, dynamics_method, cind1, cind2, ltte), options={'xtol': tol})
 
     if not res.success:
-        logger.warning("Failed to find eclipse time near {} with msg {}".format(time, res.message))
+        logger.warning("Failed to find eclipse time near {} with msg: '{}'".format(time, res.message))
+        exit()
         return np.nan
 
     # manually check bounds (not necessary for minimizers that accept bounds)
