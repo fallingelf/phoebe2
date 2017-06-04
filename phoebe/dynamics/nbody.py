@@ -23,7 +23,7 @@ try:
 except ImportError:
     _can_rebound = False
 else:
-    _can_rebound = LooseVersion(rebound.__version__) >= LooseVersion('3.3.2')
+    _can_rebound = LooseVersion(rebound.__version__) >= LooseVersion('3.4.0')
 
 if _can_rebound:
     try:
