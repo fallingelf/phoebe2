@@ -72,8 +72,8 @@ def crossing(b, component, time, dynamics_method='keplerian', ltte=True, tol=1e-
 
     # TODO: find the best minimizer (ie most efficient)
     # res = minimize(projected_separation_sq, x0=[time], method='TNC', args=(b, dynamics_method, cind1, cind2, ltte), options={'xtol': tol}, bounds=((time-orb_period/2., time+orb_period/2.),))
-    # res = minimize(projected_separation_sq, x0=[time], method='TNC', args=(b, dynamics_method, cind1, cind2, ltte), options={'xtol': 1e-3, 'ftol': 1e-3}, bounds=((time-orb_period/2., time+orb_period/2.),))
-    res = minimize(projected_separation_sq, x0=[time], method='SLSQP', args=(b, dynamics_method, cind1, cind2, ltte), options={'ftol': tol}, bounds=((time-orb_period/2., time+orb_period/2.),))
+    res = minimize(projected_separation_sq, x0=[time], method='TNC', args=(b, dynamics_method, cind1, cind2, ltte), options={'xtol': 1e-3, 'ftol': 1e-3}, bounds=((time-orb_period/2., time+orb_period/2.),))
+    # res = minimize(projected_separation_sq, x0=[time], method='SLSQP', args=(b, dynamics_method, cind1, cind2, ltte), options={'ftol': tol}, bounds=((time-orb_period/2., time+orb_period/2.),))
     # res = minimize(projected_separation_sq, x0=[time], method='Nelder-Mead', args=(b, dynamics_method, cind1, cind2, ltte), options={'xatol': tol})
     # res = minimize(projected_separation_sq, x0=[time], method='Powell', args=(b, dynamics_method, cind1, cind2, ltte), options={'xtol': tol})
 
